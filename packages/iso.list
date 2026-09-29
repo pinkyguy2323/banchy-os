@@ -34,3 +34,8 @@ mkinitcpio-nfs-utils
 #   ships syslinux too).
 syslinux
 squashfs-tools
+# nbd + nfs-utils: binaries required by the archiso_pxe_nbd / archiso_pxe_nfs
+#   mkinitcpio build hooks (mkinitcpio errors "binary not found: 'nbd-client'"
+#   otherwise and the linux initcpios step fails). Matches releng's list.
+nbd
+nfs-utils
