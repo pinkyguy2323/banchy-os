@@ -1,0 +1,12 @@
+# desc: default plus compilers, containers and language toolchains
+@default
+base-devel
+git
+python
+python-pip
+docker
+docker-compose
+nodejs
+npm
+neovim
+tmux

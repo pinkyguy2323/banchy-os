@@ -1,0 +1,56 @@
+# Managed by Banchy OS — generated file, do not edit.
+
+general {
+    disable_loading_bar = true
+    grace = 0
+    hide_cursor = true
+    no_fade_in = false
+}
+
+background {
+    path = {{WALLPAPER}}
+    blur_passes = 3
+    blur_size = 8
+    noise = 0.0117
+    contrast = 0.8916
+    brightness = 0.8172
+    vibrancy = 0.1696
+}
+
+label {
+    text = cmd[update:1000] date +%H:%M
+    color = {{TEXT}}
+    font_size = 110
+    font_family = {{FONT}}
+    position = 0, 90
+    halign = center
+    valign = center
+}
+
+label {
+    text = cmd[update:60000] date "+%a %d %b"
+    color = {{TEXT_DIM}}
+    font_size = 22
+    font_family = {{FONT}}
+    position = 0, -10
+    halign = center
+    valign = center
+}
+
+input-field {
+    size = 280, 52
+    outline_thickness = 2
+    dots_size = 0.26
+    dots_spacing = 0.3
+    outer_color = rgb({{ACCENT_RAW}})
+    inner_color = rgb({{SURFACE_RAW}})
+    font_color = rgb({{TEXT_RAW}})
+    check_color = rgb({{SUCCESS_RAW}})
+    fail_color = rgb({{DANGER_RAW}})
+    fade_on_empty = false
+    placeholder_text = <i>Password...</i>
+    fail_text = <i>Authentication failed ($ATTEMPTS)</i>
+    position = 0, -50
+    halign = center
+    valign = center
+}

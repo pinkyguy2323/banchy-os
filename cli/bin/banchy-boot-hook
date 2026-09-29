@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# banchy-boot-hook — invoked by pacman hooks around critical boot packages.
+#
+#   banchy-boot-hook backup   (PreTransaction: snapshot loader configuration)
+#   banchy-boot-hook verify    (PostTransaction: verify entries, auto-repair)
+#
+# Safety rules:
+#   * never deletes boot entries
+#   * never removes the last known good configuration
+#   * failures are logged and reported, never silent
+set -euo pipefail
+
+ACTION="${1:-}"
+LOG_DIR="/var/log/banchy"
+BACKUP_ROOT="/var/lib/banchy/boot-backup"
+mkdir -p "$LOG_DIR" "$BACKUP_ROOT" 2>/dev/null || true
+LOG="$LOG_DIR/boot-hook.log"
+
+log() {
+  printf '%s [%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$ACTION" "$*" >>"$LOG" 2>/dev/null || true
+}
+
+case "$ACTION" in
+  backup)
+    if [[ -d /boot/loader ]]; then
+      DEST="$BACKUP_ROOT/pre-transaction-$(date +%Y%m%d-%H%M%S)"
+      mkdir -p "$DEST"
+      cp -a /boot/loader "$DEST/loader"
+      # Maintain a rolling "last known good".
+      rm -rf "$BACKUP_ROOT/last-known-good.tmp"
+      cp -a /boot/loader "$BACKUP_ROOT/last-known-good.tmp"
+      rm -rf "$BACKUP_ROOT/last-known-good"
+      mv "$BACKUP_ROOT/last-known-good.tmp" "$BACKUP_ROOT/last-known-good"
+      # Keep the newest 10 dated backups.
+      # shellcheck disable=SC2012
+      ls -1dt "$BACKUP_ROOT"/pre-transaction-* 2>/dev/null | tail -n +11 | xargs -r rm -rf
+      log "backed up loader configuration to $DEST"
+    else
+      log "no /boot/loader present — nothing to back up"
+    fi
+    ;;
+  verify)
+    if ! command -v banchy >/dev/null 2>&1; then
+      log "banchy CLI not found — skipping verification"
+      exit 0
+    fi
+    if banchy boot check >/dev/null 2>&1; then
+      log "boot configuration OK after transaction"
+    else
+      log "boot configuration BROKEN after transaction — attempting repair"
+      if banchy boot install --auto --mkinitcpio >/dev/null 2>&1; then
+        log "automatic repair succeeded"
+        echo "banchy: boot entries repaired after package transaction" >&2
+      else
+        log "automatic repair FAILED"
+        echo "banchy: WARNING — boot verification failed; run 'banchy boot check'" >&2
+        echo "banchy: if the system does not boot, pick 'Banchy OS - Previous Kernel'" >&2
+      fi
+    fi
+    ;;
+  *)
+    echo "usage: banchy-boot-hook [backup|verify]" >&2
+    exit 2
+    ;;
+esac
+exit 0

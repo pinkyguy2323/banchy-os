@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# Banchy OS — first-run welcome wizard.
+# Started on the first graphical login (flag: ~/.config/banchy/first-run-done)
+# or on demand with 'banchy welcome'.
+set -euo pipefail
+
+W_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+W_FLAG="${XDG_CONFIG_HOME:-$HOME/.config}/banchy/first-run-done"
+W_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/banchy/welcome.log"
+
+w_log() {
+  mkdir -p "$(dirname "$W_LOG")" 2>/dev/null || true
+  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$W_LOG" 2>/dev/null || true
+}
+
+w_pause() {
+  printf '\nPress Enter to continue...'
+  read -r _ || true
+}
+
+w_msg() {
+  # w_msg <title> <text>
+  local title="$1" text="$2"
+  if command -v whiptail >/dev/null 2>&1 && [[ -t 0 && -t 2 ]]; then
+    whiptail --title "$title" --msgbox "$text" 0 74 || true
+  else
+    printf '\n%s\n' "$text"
+    read -rp "[Enter] " _ || true
+  fi
+}
+
+w_menu() {
+  # w_menu <title> <tag> <item>... — echoes the tag, rc 1 on cancel.
+  local title="$1" out="" rc=0
+  shift
+  if command -v whiptail >/dev/null 2>&1 && [[ -t 0 && -t 2 ]]; then
+    out="$(whiptail --title "$title" --menu "$title" 0 74 0 "$@" 3>&1 1>&2 2>&3)" || rc=$?
+  else
+    local -a tags=() items=()
+    local i
+    while [[ $# -ge 2 ]]; do
+      tags+=("$1")
+      items+=("$2")
+      shift 2
+    done
+    printf '\n%s\n' "$title" >&2
+    for i in "${!tags[@]}"; do
+      printf '  %s) %s\n' "${tags[$i]}" "${items[$i]}" >&2
+    done
+    while true; do
+      read -r -p "> " out || { rc=1; break; }
+      if [[ "$out" =~ ^[0-9]+$ ]] && ((out >= 1 && out <= ${#tags[@]})); then
+        out="${tags[$((out - 1))]}"
+        break
+      fi
+      printf 'invalid choice — enter 1..%s\n' "${#tags[@]}" >&2
+    done
+  fi
+  ((rc)) && return 1
+  printf '%s\n' "$out"
+}
+
+# --- locate the banchy CLI -----------------------------------------------------
+BANCHY_CMD=()
+if command -v banchy >/dev/null 2>&1; then
+  BANCHY_CMD=("$(command -v banchy)")
+elif [[ -x /usr/bin/banchy ]]; then
+  BANCHY_CMD=(/usr/bin/banchy)
+elif [[ -f "$W_DIR/../cli/banchy" ]]; then
+  BANCHY_CMD=(bash "$W_DIR/../cli/banchy")
+fi
+
+w_banchy() {
+  if [[ ${#BANCHY_CMD[@]} -gt 0 ]]; then
+    w_log "RUN: banchy $*"
+    "${BANCHY_CMD[@]}" "$@"
+  else
+    printf 'banchy CLI not found on this system\n' >&2
+    return 127
+  fi
+}
+
+w_need_banchy() {
+  if [[ ${#BANCHY_CMD[@]} -eq 0 ]]; then
+    w_msg "Banchy Welcome" "The banchy CLI was not found on this system.
+
+Reinstall the Banchy files (banchy-install) or run this from the repository."
+    return 1
+  fi
+  return 0
+}
+
+w_switch_theme() {
+  local list a b rest t
+  w_need_banchy || return 0
+  list="$(NO_COLOR=1 w_banchy theme list 2>/dev/null || true)"
+  if [[ -z "$list" ]]; then
+    w_msg "Theme" "No themes could be listed (banchy theme list failed)."
+    return 0
+  fi
+  local -a entries=()
+  while read -r a b rest; do
+    if [[ "$a" == "*" && -n "${b:-}" ]]; then
+      entries+=("$b" "theme (active)")
+    elif [[ "$a" =~ ^[A-Za-z0-9_-]+$ && "$a" != "THEME" ]]; then
+      entries+=("$a" "theme")
+    fi
+  done < <(printf '%s\n' "$list" | tail -n +3)
+  if [[ ${#entries[@]} -eq 0 ]]; then
+    w_msg "Theme" "No themes found."
+    return 0
+  fi
+  t="$(w_menu "Switch theme" "${entries[@]}")" || return 0
+  if w_banchy theme set "$t"; then
+    w_msg "Theme" "Theme applied: $t"
+  else
+    w_msg "Theme" "Setting the theme failed — see 'banchy theme list'."
+  fi
+  return 0
+}
+
+w_show_keys() {
+  w_need_banchy || return 0
+  printf '\n'
+  w_banchy keys || true
+  w_pause
+  return 0
+}
+
+w_run_doctor() {
+  w_need_banchy || return 0
+  printf '\n'
+  w_banchy doctor || true
+  w_pause
+  return 0
+}
+
+w_show_profiles() {
+  w_need_banchy || return 0
+  printf '\n'
+  w_banchy profile list || true
+  w_pause
+  return 0
+}
+
+w_finish() {
+  mkdir -p "$(dirname "$W_FLAG")"
+  date +%s >"$W_FLAG"
+  w_log "first-run wizard finished"
+}
+
+main() {
+  w_log "=== banchy-welcome started ==="
+  w_msg "Welcome to Banchy OS" \
+    "Welcome to Banchy OS!
+
+This quick wizard lets you pick a theme, review the keybindings, run a health check and look at the available profiles.
+
+You can reopen it any time with: banchy welcome"
+
+  # First render of the generated configuration, if it is still missing.
+  if [[ ! -f "${XDG_CONFIG_HOME:-$HOME/.config}/banchy/generated/hypr-dynamic.conf" ]] &&
+    [[ ${#BANCHY_CMD[@]} -gt 0 ]]; then
+    if w_banchy apply >/dev/null 2>&1; then
+      w_log "initial apply succeeded"
+    else
+      w_log "initial apply failed"
+      w_msg "Banchy Welcome" "The initial configuration render failed — run 'banchy doctor' for details."
+    fi
+  fi
+
+  local choice
+  while true; do
+    choice="$(w_menu "Banchy Welcome" \
+      "theme" "Switch theme" \
+      "keys" "Show keybindings summary" \
+      "doctor" "Run banchy doctor (system health)" \
+      "profile" "Show installation profiles" \
+      "done" "Finish")" || {
+      w_finish
+      exit 0
+    }
+    case "$choice" in
+      theme) w_switch_theme ;;
+      keys) w_show_keys ;;
+      doctor) w_run_doctor ;;
+      profile) w_show_profiles ;;
+      done)
+        w_finish
+        w_msg "Banchy Welcome" "Done — enjoy Banchy OS!
+
+Reopen this wizard any time with: banchy welcome"
+        exit 0
+        ;;
+    esac
+  done
+}
+
+main "$@"

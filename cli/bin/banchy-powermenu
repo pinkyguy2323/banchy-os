@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# banchy-powermenu — minimal power menu built on fuzzel.
+set -euo pipefail
+
+if ! command -v fuzzel >/dev/null 2>&1; then
+  echo "banchy-powermenu: fuzzel is not installed" >&2
+  exit 1
+fi
+
+CHOICE="$(printf '%s\n' "Lock" "Logout" "Suspend" "Reboot" "Shutdown" | \
+  fuzzel --dmenu --prompt "> " --width 24 --lines 5 --title "Banchy Power")" || exit 0
+
+case "$CHOICE" in
+  Lock)
+    if command -v hyprlock >/dev/null 2>&1; then
+      hyprlock &
+    else
+      loginctl lock-session
+    fi
+    ;;
+  Logout)
+    hyprctl dispatch exit
+    ;;
+  Suspend)
+    systemctl suspend
+    ;;
+  Reboot)
+    systemctl reboot
+    ;;
+  Shutdown)
+    systemctl poweroff
+    ;;
+esac

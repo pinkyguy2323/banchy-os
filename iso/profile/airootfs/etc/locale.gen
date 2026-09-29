@@ -1,0 +1,4 @@
+# Banchy OS live image locale list.
+# /usr/local/bin/banchy-live-setup.sh runs locale-gen at first boot so the
+# live session always has this locale available.
+en_US.UTF-8 UTF-8

@@ -1,0 +1,5 @@
+# desc: minimal plus Chromium, Visual Studio Code and Obsidian (installer default)
+@minimal
+chromium
+code
+obsidian

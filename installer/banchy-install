@@ -1,0 +1,595 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# Banchy OS installer — interactive whiptail TUI + unattended installation.
+#
+#   banchy-install                          interactive (TUI)
+#   banchy-install --unattended <answers>   non-interactive, no prompts
+#   banchy-install --help
+#
+# Install log: /var/log/banchy-install.log
+set -euo pipefail
+
+B_INSTALL_SELF="${BASH_SOURCE[0]}"
+case "$B_INSTALL_SELF" in
+  /*) ;;
+  *) B_INSTALL_SELF="$(pwd)/$B_INSTALL_SELF" ;;
+esac
+B_INSTALL_DIR="$(cd -- "$(dirname -- "$B_INSTALL_SELF")" && pwd)"
+# shellcheck disable=SC2034 # read by installer/lib/*.sh (packages.sh pkg_share_dir)
+B_INSTALL_REPO="$(cd -- "$B_INSTALL_DIR/.." && pwd)"
+
+banchy_install_usage() {
+  cat <<'EOF'
+Banchy OS installer
+
+Usage: banchy-install [OPTIONS]
+
+Options:
+  --unattended <answers.conf>   Run non-interactively from an answers file
+  -h, --help                    Show this help
+
+Answers file (KEY=VALUE, '#' comments allowed):
+  TARGET_DISK     (required) target block device, e.g. /dev/sda
+  FILESYSTEM      ext4 | btrfs                     (default: ext4)
+  SWAP            size (e.g. 4G) | none            (default: none)
+  HOSTNAME        system hostname                  (default: banchy)
+  LOCALE          e.g. en_US.UTF-8                 (default: en_US.UTF-8)
+  KEYMAP          console keymap                   (default: us)
+  TIMEZONE        e.g. Europe/Rome                 (default: UTC)
+  USER_NAME       (required) primary user login
+  USER_PASSWORD   (required) password, or '-' to generate one
+  ROOT_PASSWORD   (required) password, or '-' to generate one
+  PROFILE         minimal|default|developer|creator|gaming|full
+                                                   (default: default)
+  AUTO_REBOOT     yes | no                         (default: no)
+  THEME           optional theme name
+  SERIAL_CONSOLE  yes | no  (adds console=ttyS0 to boot entries)
+
+Aliases accepted for documentation compatibility:
+  DISK=TARGET_DISK, FS=FILESYSTEM, USERNAME=USER_NAME, PASSWORD=USER_PASSWORD
+
+The answers file is the destructive-action consent in unattended mode.
+Install log: /var/log/banchy-install.log
+EOF
+}
+
+# --- locate and source the installer libraries --------------------------------
+_installer_lib=""
+for _c in "$B_INSTALL_DIR/lib" "/usr/lib/banchy/installer"; do
+  if [[ -f "$_c/common.sh" ]]; then
+    _installer_lib="$_c"
+    break
+  fi
+done
+if [[ -z "$_installer_lib" ]]; then
+  echo "banchy-install: FATAL: cannot locate installer libraries (tried $B_INSTALL_DIR/lib and /usr/lib/banchy/installer)" >&2
+  exit 1
+fi
+# shellcheck source=lib/common.sh
+source "$_installer_lib/common.sh"
+for _f in "$_installer_lib"/*.sh; do
+  [[ "$(basename "$_f")" == "common.sh" ]] && continue
+  # shellcheck disable=SC1090
+  source "$_f"
+done
+
+for _a in "$@"; do
+  case "$_a" in
+    -h | --help)
+      banchy_install_usage
+      exit 0
+      ;;
+  esac
+done
+
+i_require_root "$@"
+
+UNATTENDED_FILE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --unattended)
+      UNATTENDED_FILE="${2:---unattended needs an answers file}"
+      shift
+      ;;
+    -h | --help) ;;
+    *)
+      banchy_install_usage >&2
+      die "unknown option: $1" 2
+      ;;
+  esac
+  shift
+done
+
+init_log() {
+  mkdir -p "$(dirname "$B_INSTALL_LOG")" 2>/dev/null || true
+  if ! touch "$B_INSTALL_LOG" 2>/dev/null; then
+    B_INSTALL_LOG="/tmp/banchy-install.log"
+    b_warn "cannot write the default log — using $B_INSTALL_LOG"
+  fi
+  exec > >(tee -a "$B_INSTALL_LOG")
+  log "=== banchy-install start ($(date -Is)) UNATTENDED_FILE='$UNATTENDED_FILE' ==="
+}
+
+cleanup_on_exit() {
+  if [[ -n "${B_PKG_PACMAN_CONF:-}" && -f "${B_PKG_PACMAN_CONF}" ]]; then
+    rm -f "$B_PKG_PACMAN_CONF"
+  fi
+  return 0
+}
+
+# --- environment --------------------------------------------------------------
+check_environment() {
+  b_header "Environment checks"
+  local fatal=0 missing="" t
+
+  if [[ -d /sys/firmware/efi ]]; then
+    b_ok "UEFI firmware detected (/sys/firmware/efi)"
+  else
+    b_fail "UEFI firmware required but not detected — boot the ISO in UEFI mode"
+    fatal=1
+  fi
+
+  for t in lsblk sfdisk mkfs.fat mkfs.ext4 pacstrap genfstab arch-chroot \
+    mount umount swapon mkswap; do
+    command -v "$t" >/dev/null 2>&1 || missing+="$t "
+  done
+  if [[ -z "$missing" ]]; then
+    b_ok "required tools present"
+  else
+    b_fail "missing required tools: $missing"
+    fatal=1
+  fi
+
+  if ((B_UNATTENDED == 0)) && ! command -v whiptail >/dev/null 2>&1; then
+    b_warn "whiptail not installed — falling back to plain prompts"
+  fi
+
+  if command -v curl >/dev/null 2>&1; then
+    if curl -sI --max-time 10 https://geo.mirror.pkgbuild.com >/dev/null 2>&1; then
+      b_ok "network: mirror reachable"
+    else
+      b_warn "network: geo.mirror.pkgbuild.com not reachable — package download may fail"
+    fi
+  else
+    b_warn "curl not available — skipping the network check"
+  fi
+
+  if ((fatal)); then
+    die "environment checks failed — not installing"
+  fi
+  return 0
+}
+
+# --- answers: collect / validate / resolve ------------------------------------
+collect_theme() {
+  # Optional theme step; skipped when the CLI or its themes are unavailable.
+  local list a b rest t
+  command -v banchy >/dev/null 2>&1 || return 0
+  list="$(NO_COLOR=1 banchy theme list 2>/dev/null || true)"
+  [[ -n "$list" ]] || return 0
+  local -a entries=("none" "Keep the default theme")
+  while read -r a b rest; do
+    if [[ "$a" == "*" && -n "${b:-}" ]]; then
+      entries+=("$b" "theme (active)")
+    elif [[ "$a" =~ ^[A-Za-z0-9_-]+$ && "$a" != "THEME" ]]; then
+      entries+=("$a" "theme")
+    fi
+  done < <(printf '%s\n' "$list" | tail -n +3)
+  t="$(ui_menu "Theme" "${entries[@]}")" || return 1
+  [[ "$t" == "none" ]] && t=""
+  B_ANS[THEME]="$t"
+  return 0
+}
+
+# shellcheck disable=SC2153 # B_ANS is `declare -A` in installer/lib/common.sh;
+#                            # SC2153 does not recognise associative-array keys.
+collect_answers_interactive() {
+  local v dev mounts prompt
+  b_header "System configuration"
+
+  v="$(ui_input "Language" "System locale (LANG):" "en_US.UTF-8")" || return 1
+  B_ANS[LOCALE]="$v"
+  v="$(ui_input "Keyboard" "Console keymap:" "us")" || return 1
+  B_ANS[KEYMAP]="$v"
+  v="$(ui_input "Timezone" "Timezone (e.g. Europe/Rome):" "UTC")" || return 1
+  B_ANS[TIMEZONE]="$v"
+
+  b_header "Disk"
+  dev="$(disk_select)" || { b_info "cancelled"; return 1; }
+  disk_validate "$dev" || return 1
+  B_ANS[TARGET_DISK]="$dev"
+  v="$(ui_menu "Filesystem" \
+    "ext4" "Ext4 — journaling, default" \
+    "btrfs" "Btrfs — @ and @home subvolumes, zstd")" || return 1
+  B_ANS[FILESYSTEM]="$v"
+  v="$(ui_input "Swap" "Swap file size (e.g. 4G) or 'none':" "none")" || return 1
+  B_ANS[SWAP]="$v"
+
+  v="$(ui_input "Hostname" "System hostname:" "banchy")" || return 1
+  B_ANS[HOSTNAME]="$v"
+
+  v="$(ui_input "User account" "Primary user name:" "user")" || return 1
+  B_ANS[USER_NAME]="$v"
+  v="$(ui_password "Password" "Password for '$v' (type '-' to generate one):")" || return 1
+  B_ANS[USER_PASSWORD]="$v"
+  v="$(ui_password "Root password" "Root password (Enter = same as user password, '-' = generate):")" || return 1
+  B_ANS[ROOT_PASSWORD]="$v"
+
+  v="$(ui_menu "Profile" \
+    "minimal" "Base system only" \
+    "default" "Base + desktop (installer default)" \
+    "developer" "default + development tools" \
+    "creator" "default + creative applications" \
+    "gaming" "default + gaming stack (multilib)" \
+    "full" "everything")" || return 1
+  B_ANS[PROFILE]="$v"
+
+  collect_theme || return 1
+
+  # Destructive consent comes last, right before anything is written.
+  mounts="$(disk_mounted_summary "${B_ANS[TARGET_DISK]}")"
+  prompt="ALL DATA on ${B_ANS[TARGET_DISK]} will be DESTROYED.
+${mounts:+$mounts
+
+}Type YES to continue:"
+  confirm_yes "$prompt" || {
+    b_warn "destructive action not confirmed — cancelled"
+    return 1
+  }
+  return 0
+}
+
+validate_answers() {
+  local errors=0 v
+  answers_defaults
+
+  v="${B_ANS[TARGET_DISK]:-}"
+  if [[ -z "$v" ]]; then
+    b_err "TARGET_DISK is required"
+    errors=1
+  elif ! disk_validate "$v"; then
+    errors=1
+  fi
+
+  v="${B_ANS[FILESYSTEM]:-}"
+  case "$v" in
+    ext4 | btrfs) ;;
+    *)
+      b_err "FILESYSTEM must be ext4 or btrfs (got '$v')"
+      errors=1
+      ;;
+  esac
+
+  v="${B_ANS[PROFILE]:-}"
+  case "$v" in
+    minimal | default | developer | creator | gaming | full) ;;
+    *)
+      b_err "PROFILE must be minimal|default|developer|creator|gaming|full (got '$v')"
+      errors=1
+      ;;
+  esac
+
+  v="${B_ANS[SWAP]:-}"
+  if [[ "$v" != "none" && ! "$v" =~ ^[0-9]+[KMGT]?$ ]]; then
+    b_err "SWAP must be 'none' or a size like 4G (got '$v')"
+    errors=1
+  fi
+
+  v="${B_ANS[USER_NAME]:-}"
+  if [[ -z "$v" ]]; then
+    b_err "USER_NAME is required"
+    errors=1
+  elif [[ ! "$v" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+    b_err "USER_NAME is not a valid login name (got '$v')"
+    errors=1
+  fi
+
+  [[ -n "${B_ANS[USER_PASSWORD]:-}" ]] || {
+    b_err "USER_PASSWORD is required (use '-' to generate one)"
+    errors=1
+  }
+  if ((B_UNATTENDED)); then
+    [[ -n "${B_ANS[ROOT_PASSWORD]:-}" ]] || {
+      b_err "ROOT_PASSWORD is required in unattended mode (use '-' to generate one)"
+      errors=1
+    }
+  fi
+
+  v="${B_ANS[HOSTNAME]:-}"
+  if [[ ! "$v" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]; then
+    b_err "invalid HOSTNAME (got '$v')"
+    errors=1
+  fi
+
+  v="${B_ANS[LOCALE]:-}"
+  if [[ ! "$v" =~ ^([A-Za-z]{2,3}(_[A-Za-z]{2})?(\.[A-Za-z0-9_-]+)?|C|POSIX)$ ]]; then
+    b_err "invalid LOCALE (got '$v')"
+    errors=1
+  fi
+
+  v="${B_ANS[TIMEZONE]:-}"
+  if [[ ! -e "/usr/share/zoneinfo/$v" ]]; then
+    b_err "unknown TIMEZONE (no /usr/share/zoneinfo/$v)"
+    errors=1
+  fi
+
+  v="${B_ANS[AUTO_REBOOT]:-}"
+  case "$v" in
+    yes | no) ;;
+    *)
+      b_err "AUTO_REBOOT must be yes or no (got '$v')"
+      errors=1
+      ;;
+  esac
+
+  local pw
+  for pw in USER_PASSWORD ROOT_PASSWORD; do
+    v="${B_ANS[$pw]:-}"
+    if [[ "$v" == *:* || "$v" == *$'\n'* ]]; then
+      b_err "$pw must not contain ':' or newlines"
+      errors=1
+    fi
+  done
+
+  if ((errors)); then
+    b_err "answers validation failed"
+    return 1
+  fi
+  b_ok "answers validated"
+  return 0
+}
+
+resolve_passwords() {
+  # Sets B_USER_PASSWORD / B_ROOT_PASSWORD. A '-' value generates a password
+  # that is printed exactly once on stderr (never written to the log).
+  local upw rpw
+  upw="${B_ANS[USER_PASSWORD]:-}"
+  if [[ "$upw" == "-" ]]; then
+    upw="$(i_gen_password)"
+    printf 'generated user password (shown once, not logged): %s\n' "$upw" >&2
+    log "generated a user password (value not logged)"
+  fi
+  rpw="${B_ANS[ROOT_PASSWORD]:-}"
+  if [[ -z "$rpw" ]]; then
+    rpw="$upw"
+    b_info "root password = user password"
+  elif [[ "$rpw" == "-" ]]; then
+    rpw="$(i_gen_password)"
+    printf 'generated root password (shown once, not logged): %s\n' "$rpw" >&2
+    log "generated a root password (value not logged)"
+  fi
+  if [[ "$upw" == *:* || "$upw" == *$'\n'* || "$rpw" == *:* || "$rpw" == *$'\n'* ]]; then
+    b_err "passwords must not contain ':' or newlines"
+    return 1
+  fi
+  B_USER_PASSWORD="$upw"
+  B_ROOT_PASSWORD="$rpw"
+  return 0
+}
+
+# --- install steps ------------------------------------------------------------
+step_system_config() {
+  local host="${B_ANS[HOSTNAME]}" loc="${B_ANS[LOCALE]}" keymap="${B_ANS[KEYMAP]}"
+  local tz="${B_ANS[TIMEZONE]}" user="${B_ANS[USER_NAME]}" fs="${B_ANS[FILESYSTEM]}"
+  local escaped
+  b_header "System configuration (target)"
+
+  log "write /etc/hostname = $host"
+  printf '%s\n' "$host" >"$MNT/etc/hostname"
+
+  # Uncomment the chosen locale (or add it), then generate it in the chroot.
+  escaped="${loc//./\\.}"
+  if grep -Eq "^[[:space:]]*#[[:space:]]*${escaped}([[:space:]]|\$)" "$MNT/etc/locale.gen"; then
+    sed -i -E "s/^([[:space:]]*)#[[:space:]]*(${escaped}[[:space:]].*)\$/\1\2/" "$MNT/etc/locale.gen"
+  elif ! grep -Eq "^[[:space:]]*${escaped}([[:space:]]|\$)" "$MNT/etc/locale.gen"; then
+    printf '%s UTF-8\n' "$loc" >>"$MNT/etc/locale.gen"
+  fi
+  printf 'LANG=%s\n' "$loc" >"$MNT/etc/locale.conf"
+  printf 'KEYMAP=%s\n' "$keymap" >"$MNT/etc/vconsole.conf"
+  run_chroot locale-gen
+
+  run_chroot ln -snf "/usr/share/zoneinfo/$tz" /etc/localtime
+  run_chroot hwclock --systohc
+  b_ok "locale ($loc), keymap ($keymap) and timezone ($tz) configured"
+
+  mkdir -p "$MNT/etc/sudoers.d"
+  cat >"$MNT/etc/sudoers.d/wheel" <<'EOF'
+%wheel ALL=(ALL:ALL) ALL
+EOF
+  chmod 440 "$MNT/etc/sudoers.d/wheel"
+  b_ok "wheel sudoers rule written (/etc/sudoers.d/wheel, mode 440)"
+
+  if grep -q "^${user}:" "$MNT/etc/passwd" 2>/dev/null; then
+    b_warn "user '$user' already exists — skipping useradd"
+  else
+    run_chroot useradd -m -G wheel -s /bin/bash "$user"
+    b_ok "user created: $user (wheel, /bin/bash)"
+  fi
+
+  {
+    printf 'root:%s\n' "$B_ROOT_PASSWORD"
+    printf '%s:%s\n' "$user" "$B_USER_PASSWORD"
+  } | run_chroot chpasswd
+  b_ok "passwords set for root and $user"
+
+  disk_swapfile_create "$fs" "${B_ANS[SWAP]}"
+}
+
+step_seed_user() {
+  local user="${B_ANS[USER_NAME]}"
+  b_header "Seeding user configuration"
+  if [[ -n "${B_ANS[THEME]:-}" ]]; then
+    if run_chroot banchy theme set "${B_ANS[THEME]}"; then
+      b_ok "theme: ${B_ANS[THEME]}"
+    else
+      b_warn "theme set failed — continuing with defaults"
+    fi
+  fi
+  if run_chroot banchy apply --no-reload --root "/home/$user"; then
+    b_ok "configuration rendered into /home/$user"
+  else
+    die "banchy apply failed in the target — installation stopped before verification"
+  fi
+  run_chroot chown -R "$user:$user" "/home/$user"
+  b_ok "ownership fixed: $user:$user /home/$user"
+}
+
+step_services() {
+  b_header "Enabling services"
+  run_chroot systemctl enable NetworkManager.service fstrim.timer
+  b_ok "enabled: NetworkManager.service, fstrim.timer"
+}
+
+run_install_steps() {
+  local dev="${B_ANS[TARGET_DISK]}" fs="${B_ANS[FILESYSTEM]}" profile="${B_ANS[PROFILE]}"
+  local esp rootp
+
+  if [[ "$fs" == "btrfs" ]] && ! command -v mkfs.btrfs >/dev/null 2>&1; then
+    die "mkfs.btrfs not available (btrfs-progs) but FILESYSTEM=btrfs was requested"
+  fi
+
+  disk_partition "$dev"
+  esp="$(disk_part_path "$dev" 1)"
+  rootp="$(disk_part_path "$dev" 2)"
+  disk_mkfs_esp "$esp"
+  disk_mkfs_root "$rootp" "$fs"
+  disk_mount_root "$rootp" "$fs"
+  disk_mount_esp "$esp"
+
+  b_header "Installing the base system (pacstrap)"
+  pkg_pacstrap "$profile" "$fs"
+
+  b_header "Writing fstab"
+  i_cmd genfstab -U "$MNT"
+  log "RUN: genfstab -U $MNT >> $MNT/etc/fstab"
+  genfstab -U "$MNT" >>"$MNT/etc/fstab"
+  b_ok "fstab written ($MNT/etc/fstab)"
+
+  step_system_config
+  boot_stage_files
+  local -a boot_args=()
+  if [[ -n "${B_ANS[SERIAL_CONSOLE]:-}" && "${B_ANS[SERIAL_CONSOLE]}" != "no" ]]; then
+    boot_args+=(--serial)
+  fi
+  boot_install_target ${boot_args[@]+"${boot_args[@]}"}
+  step_seed_user
+  step_services
+  return 0
+}
+
+print_summary() {
+  b_header "Installation summary"
+  printf '  Disk:       %s\n' "${B_ANS[TARGET_DISK]}"
+  printf '  Filesystem: %s\n' "${B_ANS[FILESYSTEM]}"
+  printf '  Swap:       %s\n' "${B_ANS[SWAP]}"
+  printf '  Hostname:   %s\n' "${B_ANS[HOSTNAME]}"
+  printf '  Locale:     %s  (keymap %s, %s)\n' \
+    "${B_ANS[LOCALE]}" "${B_ANS[KEYMAP]}" "${B_ANS[TIMEZONE]}"
+  printf '  User:       %s\n' "${B_ANS[USER_NAME]}"
+  printf '  Profile:    %s\n' "${B_ANS[PROFILE]}"
+}
+
+do_reboot() {
+  b_header "Rebooting"
+  i_cmd swapoff -a
+  swapoff -a 2>/dev/null || true
+  i_cmd umount -R "$MNT"
+  if ! umount -R "$MNT" 2>/dev/null; then
+    die "could not unmount $MNT — reboot aborted (close busy processes, then reboot manually)"
+  fi
+  log "RUN: systemctl reboot"
+  systemctl reboot
+  exit 0
+}
+
+# --- modes --------------------------------------------------------------------
+run_unattended() {
+  answers_load "$UNATTENDED_FILE"
+  answers_defaults
+  validate_answers || die "answers file failed validation"
+  resolve_passwords || die "invalid password values in the answers file"
+  check_environment
+  b_header "Unattended install: ${B_ANS[TARGET_DISK]} (${B_ANS[FILESYSTEM]})"
+  run_install_steps
+  if verify_run "${B_ANS[USER_NAME]}"; then
+    print_summary
+    if [[ "${B_ANS[AUTO_REBOOT]}" == "yes" ]]; then
+      do_reboot
+    fi
+    b_ok "installation complete (AUTO_REBOOT=no — reboot when ready)"
+    return 0
+  fi
+  b_fail "verification gate failed — NOT rebooting"
+  return 1
+}
+
+run_interactive() {
+  ui_msgbox "Banchy OS installer" \
+    "Welcome to the Banchy OS installer.
+
+This will install Banchy OS (UEFI + GPT, systemd-boot) onto a disk of your choice. All data on the target disk will be destroyed.
+
+Log file: $B_INSTALL_LOG" || true
+  check_environment
+
+  local choice
+  while true; do
+    choice="$(ui_menu "Banchy Installer" \
+      "install" "Install Banchy OS to a disk" \
+      "verify" "Run the verification gate" \
+      "reboot" "Reboot the installed system" \
+      "exit" "Exit to shell")" || {
+      b_info "cancelled"
+      return 0
+    }
+    case "$choice" in
+      install)
+        if collect_answers_interactive && validate_answers &&
+          resolve_passwords && run_install_steps; then
+          if verify_run "${B_ANS[USER_NAME]:-}"; then
+            print_summary
+            if ui_yesno "Installation complete" \
+              "All verification checks passed. Reboot into Banchy OS now?"; then
+              do_reboot
+            fi
+          else
+            if ui_yesno "Verification failed" \
+              "Verification reported failures (see table above).
+
+Return to the installer menu? Choosing No aborts WITHOUT rebooting."; then
+              continue
+            fi
+            die "installation aborted after verification failure (no reboot)"
+          fi
+        else
+          b_warn "install step failed or cancelled — returning to the menu"
+          disk_unmount_all || true
+        fi
+        ;;
+      verify)
+        verify_run "${B_ANS[USER_NAME]:-}" || true
+        ;;
+      reboot)
+        if ui_yesno "Reboot" "Reboot the system now?"; then
+          do_reboot
+        fi
+        ;;
+      exit)
+        return 0
+        ;;
+    esac
+  done
+}
+
+init_log
+trap cleanup_on_exit EXIT
+
+if [[ -n "$UNATTENDED_FILE" ]]; then
+  B_UNATTENDED=1
+  export B_UNATTENDED
+  run_unattended
+else
+  B_UNATTENDED=0
+  export B_UNATTENDED
+  run_interactive
+fi

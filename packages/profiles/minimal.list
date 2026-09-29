@@ -1,0 +1,10 @@
+# desc: core command-line utilities on top of the base system + Hyprland
+# Installed over base.list + desktop.list; kept intentionally small.
+
+usbutils
+pciutils
+lsof
+htop
+tree
+zip
+unzip

@@ -1,0 +1,18 @@
+# Banchy OS — pacman hook: verify the boot configuration after critical
+# package transactions. Installed by Banchy OS (scripts/install-files.sh
+# stages this file to /etc/pacman.d/hooks/banchy-boot.hook).
+#
+# PostTransaction: banchy-boot-hook verify checks the loader entries and
+# kernels, and attempts an automatic repair when the transaction broke them.
+
+[Trigger]
+Type = Package
+Operation = Install
+Operation = Upgrade
+Target = linux
+Target = linux-lts
+Target = systemd
+
+[Action]
+When = PostTransaction
+Exec = /usr/bin/banchy-boot-hook verify

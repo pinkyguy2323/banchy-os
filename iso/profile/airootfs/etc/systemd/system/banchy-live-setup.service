@@ -1,0 +1,15 @@
+[Unit]
+Description=Banchy OS live session setup
+# Live image only (/etc/banchy-live marker ships in the airootfs overlay).
+ConditionPathExists=/etc/banchy-live
+# Runs before the gettys so the autologin user exists on tty1/ttyS0.
+After=local-fs.target
+Before=getty@tty1.service serial-getty@ttyS0.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/banchy-live-setup.sh
+
+[Install]
+WantedBy=multi-user.target

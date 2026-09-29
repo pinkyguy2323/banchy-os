@@ -1,0 +1,7 @@
+# desc: default plus Steam and gaming tools (enables the [multilib] repository)
+!multilib
+@default
+steam
+gamescope
+mangohud
+gamemode

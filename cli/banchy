@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Banchy OS command line interface.
+# Entry point: dispatches to banchy_cmd_* functions defined in lib/.
+set -euo pipefail
+
+BANCHY_VERSION="0.1.0"
+
+_banchy_self="${BASH_SOURCE[0]}"
+# Resolve to an absolute path (for sudo re-exec later).
+case "$_banchy_self" in
+  /*) ;;
+  *) _banchy_self="$(pwd)/$_banchy_self" ;;
+esac
+_banchy_dir="$(cd -- "$(dirname -- "$_banchy_self")" && pwd)"
+export BANCHY_SELF="$_banchy_self"
+
+# --- locate libraries -------------------------------------------------------
+if [[ -z "${BANCHY_LIB:-}" ]]; then
+  for _c in "$_banchy_dir/lib" "$_banchy_dir/../lib" "/usr/lib/banchy"; do
+    if [[ -f "$_c/common.sh" ]]; then
+      BANCHY_LIB="$_c"
+      break
+    fi
+  done
+fi
+if [[ -z "${BANCHY_LIB:-}" || ! -f "${BANCHY_LIB}/common.sh" ]]; then
+  echo "banchy: FATAL: cannot locate Banchy libraries (BANCHY_LIB)" >&2
+  exit 1
+fi
+
+# shellcheck source=lib/common.sh
+source "$BANCHY_LIB/common.sh"
+# shellcheck source=lib/settings.sh
+source "$BANCHY_LIB/settings.sh"
+# shellcheck source=lib/render.sh
+source "$BANCHY_LIB/render.sh"
+# shellcheck source=lib/theme.sh
+source "$BANCHY_LIB/theme.sh"
+# shellcheck source=lib/commands.sh
+source "$BANCHY_LIB/commands.sh"
+# shellcheck source=lib/doctor.sh
+source "$BANCHY_LIB/doctor.sh"
+# shellcheck source=lib/update.sh
+source "$BANCHY_LIB/update.sh"
+# shellcheck source=lib/boot.sh
+source "$BANCHY_LIB/boot.sh"
+# shellcheck source=lib/config.sh
+source "$BANCHY_LIB/config.sh"
+# shellcheck source=lib/profile.sh
+source "$BANCHY_LIB/profile.sh"
+# shellcheck source=lib/package.sh
+source "$BANCHY_LIB/package.sh"
+# shellcheck source=lib/system.sh
+source "$BANCHY_LIB/system.sh"
+# shellcheck source=lib/info.sh
+source "$BANCHY_LIB/info.sh"
+# shellcheck source=lib/keys.sh
+source "$BANCHY_LIB/keys.sh"
+# shellcheck source=lib/recovery.sh
+source "$BANCHY_LIB/recovery.sh"
+
+BANCHY_ORIG_ARGS=("$@")
+export BANCHY_ORIG_ARGS
+
+banchy_usage() {
+  cat <<'EOF'
+Banchy OS — command line interface
+
+Usage: banchy <command> [arguments]
+
+System
+  update [--check]        Safe system update (checks, backup, snapshot, verify)
+  doctor                  Full system health check
+  system check            Quick system check (services, disk, time, network)
+  info                    Show system and Banchy information
+  keys                    Show keyboard shortcuts
+
+Appearance
+  theme list              List available themes
+  theme set <name>        Apply a theme (validated, with rollback)
+  theme create <name>     Create a custom theme from an existing one
+  theme validate <name>   Validate a theme definition
+  set <key> <value>       Change a setting (validated) and apply
+  get <key>               Print a setting value
+  apply [--check]         Re-render configuration (check = dry run)
+
+Packages and profiles
+  profile list            List installation profiles
+  profile <name>          Apply a package profile (minimal|default|developer|creator|gaming|full)
+  package install <pkgs>  Install packages (pacman -S --needed)
+  package remove <pkgs>   Remove packages (pacman -Rns)
+
+Boot and recovery
+  boot check              Verify ESP, loader entries, kernels, initramfs
+  boot repair             Re-install bootloader and regenerate entries
+  boot install            Install Banchy Boot entries (used by installer)
+  recovery                Start the recovery menu
+
+Configuration
+  config backup [label]   Back up user configuration
+  config restore [file]   Restore a configuration backup
+  config diff             Show configuration drift
+  config check            Validate configuration integrity
+  reset hyprland          Reset Hyprland configuration to defaults
+
+Other
+  welcome                 Run the first-run wizard
+  autostart               Session bootstrap (called on login)
+  version                 Print version
+  help                    Show this help
+
+Run 'banchy keys' for the full keybinding list.
+EOF
+}
+
+cmd="${1:-help}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+case "$cmd" in
+  -h|--help|help) banchy_usage ;;
+  -v|--version|version) echo "Banchy OS $BANCHY_VERSION" ;;
+  set|get|apply|autostart) "banchy_cmd_$cmd" "$@" ;;
+  update|doctor|info|keys|theme|package|profile|config|reset|boot|system|recovery|welcome)
+    "banchy_cmd_$cmd" "$@" ;;
+  *)
+    echo "banchy: unknown command: $cmd" >&2
+    echo "Run 'banchy help' for usage." >&2
+    exit 2
+    ;;
+esac

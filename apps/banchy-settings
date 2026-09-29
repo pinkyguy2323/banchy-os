@@ -1,0 +1,437 @@
+#!/usr/bin/env python3
+# Banchy OS — settings editor (GTK 4).
+#
+# The banchy CLI is the single source of truth: values are read with
+# 'banchy get <key>' and written with 'banchy set <key> <value>' followed by
+# 'banchy apply'. Anything the CLI rejects is reported in an error dialog.
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+try:
+    import gi
+    gi.require_version("Gtk", "4.0")
+    from gi.repository import GLib, Gtk
+except Exception as exc:
+    sys.stderr.write(
+        "banchy-settings: GTK 4 (PyGObject) could not be loaded: {0}\n"
+        "  install it with: sudo pacman -S python-gobject gtk4\n".format(exc))
+    sys.exit(1)
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+IMAGE_PATTERNS = ("*.png", "*.jpg", "*.jpeg", "*.webp", "*.bmp")
+
+SPINS = {
+    "transparency": (0.0, 0.6, 0.01, 2),
+    "anim_speed": (0.1, 3.0, 0.1, 1),
+    "border_size": (0, 8, 1, 0),
+    "border_radius": (0, 20, 1, 0),
+    "gaps_in": (0, 30, 1, 0),
+    "gaps_out": (0, 40, 1, 0),
+    "font_size": (8, 32, 1, 0),
+    "cursor_size": (16, 48, 1, 0),
+    "waybar_height": (24, 64, 1, 0),
+}
+SWITCH_KEYS = ("blur", "animations")
+CHOICES = {
+    "theme": [],
+    "mode": ["dark", "light"],
+    "waybar_position": ["top", "bottom"],
+}
+TABS = (
+    ("General", ("theme", "mode", "accent", "wallpaper", "night_location")),
+    ("Windows", ("transparency", "blur", "animations", "anim_speed",
+                 "border_size", "border_radius", "gaps_in", "gaps_out")),
+    ("Fonts and bar", ("font", "font_size", "terminal_font", "cursor_size",
+                       "waybar_position", "waybar_height")),
+)
+ALL_KEYS = tuple(key for _title, keys in TABS for key in keys)
+
+
+def kind_of(key):
+    if key in SPINS:
+        return "spin"
+    if key in SWITCH_KEYS:
+        return "switch"
+    if key in CHOICES:
+        return "choice"
+    if key == "accent":
+        return "accent"
+    if key == "wallpaper":
+        return "file"
+    return "text"
+
+
+def locate(name, *fallback):
+    override = os.environ.get("BANCHY_BIN") if name == "banchy" else None
+    if override:
+        return override
+    on_path = shutil.which(name)
+    if on_path:
+        return on_path
+    candidate = os.path.join(REPO_ROOT, *fallback)
+    return candidate if os.path.isfile(candidate) else None
+
+
+BANCHY = locate("banchy", "cli", "banchy")
+
+
+def banchy(*args):
+    """Run the CLI, returning (returncode, stdout, stderr)."""
+    if not BANCHY:
+        return 127, "", "banchy CLI not found (install Banchy OS or set BANCHY_BIN)"
+    try:
+        proc = subprocess.run([BANCHY] + list(args),
+                              capture_output=True, text=True)
+    except OSError as exc:
+        return 127, "", str(exc)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def get_value(key):
+    rc, out, err = banchy("get", key)
+    if rc != 0:
+        return "", (err or out).strip() or "banchy get {0} failed".format(key)
+    return out.strip(), None
+
+
+def parse_theme_list(text):
+    """Parse 'banchy theme list' rows: [*] <name> <display> <accent>."""
+    themes = []
+    for line in text.splitlines():
+        tokens = line.split()
+        if not tokens:
+            continue
+        active = tokens[0] == "*"
+        if active:
+            tokens = tokens[1:]
+        if not tokens or tokens[0] == "THEME" or not tokens[0].strip("-"):
+            continue
+        name = tokens[0]
+        if not re.match(r"^[A-Za-z0-9_-]+$", name):
+            continue
+        themes.append((name,
+                       tokens[1] if len(tokens) > 1 else name,
+                       tokens[2] if len(tokens) > 2 else "",
+                       active))
+    return themes
+
+
+def show_error(parent, primary, detail):
+    dialog = Gtk.MessageDialog(transient_for=parent, modal=True,
+                               message_type=Gtk.MessageType.ERROR,
+                               buttons=Gtk.ButtonsType.CLOSE, text=primary)
+    if detail:
+        dialog.set_secondary_text(detail)
+    dialog.connect("response", lambda d, _response: d.close())
+    dialog.present()
+
+
+class SettingsWindow(Gtk.ApplicationWindow):
+
+    def __init__(self, application):
+        super().__init__(application=application, title="Banchy Settings",
+                         default_width=740, default_height=640)
+        self.editors = {}
+        self.current = {}
+        self.themes = []
+        self.errors = []
+        self._chooser = None
+
+        for key in ALL_KEYS:
+            value, error = get_value(key)
+            self.current[key] = value
+            if error:
+                self.errors.append(error)
+
+        header = Gtk.HeaderBar()
+        header.set_title_widget(Gtk.Label(label="Banchy Settings"))
+        reload_button = Gtk.Button(label="Reload")
+        reload_button.connect("clicked", self.on_reload)
+        header.pack_start(reload_button)
+        apply_button = Gtk.Button(label="Apply")
+        apply_button.add_css_class("suggested-action")
+        apply_button.connect("clicked", self.on_apply)
+        header.pack_end(apply_button)
+        self.set_titlebar(header)
+
+        self.notebook = Gtk.Notebook()
+        self.build_tabs()
+
+        self.status = Gtk.Label(label="Editing system settings", xalign=0,
+                                margin_start=14, margin_end=14,
+                                margin_top=6, margin_bottom=10)
+        self.status.set_selectable(True)
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.append(self.notebook)
+        outer.append(self.status)
+        self.set_child(outer)
+
+        self.refresh_themes()
+        if self.errors:
+            GLib.idle_add(self.report_load_errors)
+
+    # --- UI construction ----------------------------------------------------
+    def build_tabs(self):
+        for title, keys in TABS:
+            page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
+                           margin_start=18, margin_end=18, margin_top=16,
+                           margin_bottom=16)
+            for key in keys:
+                page.append(self.build_row(key))
+            scroll = Gtk.ScrolledWindow()
+            scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            scroll.set_child(page)
+            self.notebook.append_page(scroll, Gtk.Label(label=title))
+        self.notebook.append_page(self.build_theme_tab(),
+                                  Gtk.Label(label="Themes"))
+
+    def build_row(self, key):
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        label = Gtk.Label(label=key.replace("_", " "), xalign=0)
+        label.set_hexpand(True)
+        row.append(label)
+        editor = self.build_editor(key)
+        self.editors[key] = editor
+        row.append(editor)
+        return row
+
+    def build_editor(self, key):
+        kind = kind_of(key)
+        value = self.current.get(key, "")
+        if kind == "switch":
+            editor = Gtk.Switch()
+            editor.set_active(value == "on")
+        elif kind == "spin":
+            low, high, step, digits = SPINS[key]
+            editor = Gtk.SpinButton.new_with_range(low, high, step)
+            editor.set_digits(digits)
+            try:
+                editor.set_value(float(value))
+            except ValueError:
+                editor.set_value(low)
+            editor.set_size_request(96, -1)
+        elif kind == "choice":
+            editor = Gtk.ComboBoxText()
+            for choice in CHOICES[key]:
+                editor.append(choice, choice)
+            options = CHOICES[key]
+            editor.set_active_id(value if value in options else
+                                 (options[0] if options else None))
+        elif kind == "accent":
+            editor = Gtk.Entry()
+            editor.set_text(value)
+            editor.set_max_length(7)
+            editor.set_placeholder_text("#RRGGBB (empty = theme accent)")
+            editor.set_width_chars(10)
+        elif kind == "file":
+            editor = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            picker = Gtk.Button(label=value or "Theme default")
+            picker.connect("clicked", self.on_pick_wallpaper, key)
+            editor.append(picker)
+            clear = Gtk.Button(label="Clear")
+            clear.connect("clicked", self.on_clear_wallpaper, key)
+            editor.append(clear)
+        else:
+            editor = Gtk.Entry()
+            editor.set_text(value)
+            editor.set_hexpand(True)
+        if kind != "file":
+            editor.set_halign(Gtk.Align.END)
+        return editor
+
+    def build_theme_tab(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10,
+                      margin_start=18, margin_end=18, margin_top=16,
+                      margin_bottom=16)
+        hint = Gtk.Label(xalign=0)
+        hint.set_text("Bundled themes. Select one and apply it — "
+                      "the whole desktop follows.")
+        box.append(hint)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        self.theme_list = Gtk.ListBox()
+        self.theme_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        scroll.set_child(self.theme_list)
+        box.append(scroll)
+        button = Gtk.Button(label="Set selected theme")
+        button.add_css_class("suggested-action")
+        button.connect("clicked", self.on_set_theme)
+        box.append(button)
+        return box
+
+    # --- reading / writing widgets -----------------------------------------
+    def read_editor(self, key):
+        editor = self.editors[key]
+        kind = kind_of(key)
+        if kind == "switch":
+            return "on" if editor.get_active() else "off"
+        if kind == "spin":
+            _low, _high, _step, digits = SPINS[key]
+            value = editor.get_value()
+            return "{0:g}".format(value) if digits else str(int(value))
+        if kind == "choice":
+            return editor.get_active_id() or ""
+        if kind == "file":
+            label = editor.get_first_child().get_label()
+            return "" if label == "Theme default" else label
+        if kind == "accent":
+            return editor.get_text().strip()
+        return editor.get_text()
+
+    def set_editor(self, key, value):
+        editor = self.editors[key]
+        kind = kind_of(key)
+        if kind == "switch":
+            editor.set_active(value == "on")
+        elif kind == "spin":
+            try:
+                editor.set_value(float(value))
+            except ValueError:
+                pass
+        elif kind == "choice":
+            if value:
+                editor.set_active_id(value)
+        elif kind == "file":
+            editor.get_first_child().set_label(value or "Theme default")
+        else:
+            editor.set_text(value)
+
+    # --- actions ------------------------------------------------------------
+    def on_apply(self, _button):
+        if not BANCHY:
+            show_error(self, "banchy CLI not found",
+                       "Install Banchy OS, or point BANCHY_BIN at the CLI.")
+            return
+        changes = []
+        for key in ALL_KEYS:
+            value = self.read_editor(key)
+            if value == self.current.get(key, ""):
+                continue
+            if key == "accent" and value and not HEX_RE.match(value):
+                show_error(self, "Invalid accent colour",
+                           "'{0}' is not a #RRGGBB colour.".format(value))
+                return
+            changes.append((key, value))
+        if not changes:
+            self.status.set_text("Nothing changed.")
+            return
+        failures = []
+        for key, value in changes:
+            rc, out, err = banchy("set", key, value)
+            if rc != 0:
+                failures.append("set {0}={1}: {2}".format(
+                    key, value, (err or out).strip()))
+        if not failures:
+            rc, out, err = banchy("apply")
+            if rc != 0:
+                failures.append("apply: {0}".format((err or out).strip()))
+        if failures:
+            show_error(self, "Could not apply settings", "\n".join(failures))
+            self.status.set_text("Apply failed — see the error dialog.")
+        else:
+            self.status.set_text("Applied {0} change(s).".format(len(changes)))
+        self.reload_values()
+        self.refresh_themes()
+
+    def on_reload(self, _button):
+        self.reload_values()
+        self.refresh_themes()
+        self.status.set_text("Reloaded values from the banchy CLI.")
+
+    def reload_values(self):
+        for key in ALL_KEYS:
+            value, error = get_value(key)
+            if error:
+                continue
+            self.current[key] = value
+            self.set_editor(key, value)
+
+    def on_set_theme(self, _button):
+        row = self.theme_list.get_selected_row()
+        if row is None:
+            self.status.set_text("Select a theme first.")
+            return
+        name = self.themes[row.get_index()][0]
+        rc, out, err = banchy("theme", "set", name)
+        if rc != 0:
+            show_error(self, "Could not set the theme",
+                       (err or out).strip())
+            return
+        self.status.set_text("Theme set to {0}.".format(name))
+        self.reload_values()
+        self.refresh_themes()
+
+    def on_pick_wallpaper(self, button, key):
+        chooser = Gtk.FileChooserNative(
+            title="Choose a wallpaper", transient_for=self,
+            action=Gtk.FileChooserAction.OPEN,
+            accept_label="Select", cancel_label="Cancel")
+        image_filter = Gtk.FileFilter()
+        image_filter.set_name("Images")
+        for pattern in IMAGE_PATTERNS:
+            image_filter.add_pattern(pattern)
+        chooser.add_filter(image_filter)
+
+        def on_response(dialog, response):
+            if response == Gtk.ResponseType.ACCEPT:
+                chosen = dialog.get_file()
+                if chosen is not None and chosen.get_path():
+                    button.set_label(chosen.get_path())
+            self._chooser = None
+
+        self._chooser = chooser
+        chooser.connect("response", on_response)
+        chooser.show()
+
+    def on_clear_wallpaper(self, _button, key):
+        self.editors[key].get_first_child().set_label("Theme default")
+
+    # --- theme tab ----------------------------------------------------------
+    def refresh_themes(self):
+        rc, out, _err = banchy("theme", "list")
+        self.themes = parse_theme_list(out) if rc == 0 else []
+        combo = self.editors.get("theme")
+        if combo is not None:
+            combo.remove_all()
+            for name, _display, _accent, _active in self.themes:
+                combo.append(name, name)
+            active = self.current.get("theme", "")
+            if active:
+                combo.set_active_id(active)
+        row = self.theme_list.get_first_child()
+        while row is not None:
+            following = row.get_next_sibling()
+            self.theme_list.remove(row)
+            row = following
+        for name, display, accent, active in self.themes:
+            text = "{0}{1} — {2}  {3}".format("* " if active else "  ",
+                                              name, display, accent)
+            label = Gtk.Label(label=text, xalign=0, margin_start=8,
+                              margin_end=8, margin_top=5, margin_bottom=5)
+            self.theme_list.append(Gtk.ListBoxRow(child=label))
+
+    def report_load_errors(self):
+        unique = list(dict.fromkeys(self.errors))
+        show_error(self, "Some settings could not be read",
+                   "\n".join(unique[:6]))
+        self.status.set_text("Fix the CLI errors above, then press Reload.")
+        return False
+
+
+def main():
+    app = Gtk.Application(application_id="org.banchy.Settings")
+
+    def on_activate(application):
+        SettingsWindow(application).present()
+
+    app.connect("activate", on_activate)
+    sys.exit(app.run(sys.argv))
+
+
+if __name__ == "__main__":
+    main()

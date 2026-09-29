@@ -1,0 +1,14 @@
+# Banchy OS — desktop session packages (Hyprland stack).
+# Started by configs/hypr/hyprland.conf (waybar, hyprpaper, hypridle, mako
+# via the theme engine, fuzzel/kitty via keybindings).
+
+hyprland
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+waybar
+kitty
+mako
+fuzzel
+hyprlock
+hyprpaper
+hypridle

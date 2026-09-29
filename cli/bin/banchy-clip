@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# banchy-clip — clipboard history picker (cliphist + fuzzel/wl-paste).
+set -euo pipefail
+
+if ! command -v cliphist >/dev/null 2>&1; then
+  echo "banchy-clip: cliphist is not installed" >&2
+  exit 1
+fi
+
+case "${1:-pick}" in
+  store)
+    wl-paste --watch cliphist store
+    ;;
+  clear)
+    cliphist wipe
+    ;;
+  pick|*)
+    SELECTION="$(cliphist list | fuzzel --dmenu --prompt "> " --width 60 --lines 12 \
+      --title "Clipboard history")" || exit 0
+    if [[ -n "$SELECTION" ]]; then
+      echo "$SELECTION" | cliphist decode | wl-copy
+    fi
+    ;;
+esac

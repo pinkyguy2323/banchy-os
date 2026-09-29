@@ -1,0 +1,79 @@
+{
+  // Managed by Banchy OS — generated file, do not edit.
+  "layer": "top",
+  "position": "{{WAYBAR_POSITION}}",
+  "height": {{WAYBAR_HEIGHT}},
+  "spacing": 4,
+  "margin": "6px 8px",
+  "modules-left": ["custom/banchy", "hyprland/workspaces", "hyprland/window"],
+  "modules-center": ["clock"],
+  "modules-right": ["custom/install", "tray", "pulseaudio", "network", "custom/power"],
+
+  "hyprland/workspaces": {
+    "format": "{name}",
+    "persistent-workspaces": { "*": [1, 2, 3, 4, 5, 6, 7, 8, 9] },
+    "sort-by-number": true,
+    "active-only": false,
+    "disable-scroll": false,
+    "on-scroll-up": "hyprctl dispatch workspace e+1",
+    "on-scroll-down": "hyprctl dispatch workspace e-1"
+  },
+
+  "hyprland/window": {
+    "format": "{title}",
+    "max-length": 52,
+    "separate-outputs": true,
+    "rewrite": { "(.*) — Mozilla Firefox": "$1", "(.*) - Visual Studio Code": "$1" }
+  },
+
+  "clock": {
+    "format": "{:%H:%M}",
+    "format-alt": "{:%Y-%m-%d  %H:%M}",
+    "tooltip-format": "<tt>{calendar}</tt>",
+    "interval": 60
+  },
+
+  "tray": {
+    "icon-size": 16,
+    "spacing": 8
+  },
+
+  "pulseaudio": {
+    "format": "{icon} {volume}%",
+    "format-muted": "muted",
+    "format-icons": {
+      "default": ["\uf027", "\uf028", "\uf028"]
+    },
+    "scroll-step": 5,
+    "on-click": "pavucontrol",
+    "on-click-right": "banchy-cc"
+  },
+
+  "network": {
+    "format-wifi": "\uf1eb {signalStrength}%",
+    "format-ethernet": "eth",
+    "format-disconnected": "offline",
+    "tooltip-format": "{ifname}\n{ipaddr}/{cidr}",
+    "on-click": "banchy-cc"
+  },
+
+  "custom/install": {
+    "format": "Install",
+    "exec-if": "test -x /usr/bin/banchy-install && test -f /etc/banchy-live",
+    "on-click": "kitty -e sudo banchy-install",
+    "tooltip": false,
+    "interval": 60
+  },
+
+  "custom/banchy": {
+    "format": "B",
+    "on-click": "fuzzel",
+    "tooltip": true
+  },
+
+  "custom/power": {
+    "format": "\uf011",
+    "on-click": "banchy-powermenu",
+    "tooltip": false
+  }
+}

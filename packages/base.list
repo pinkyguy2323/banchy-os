@@ -1,0 +1,75 @@
+# Banchy OS — base runtime package set.
+# Installed on every target system by the installer and included on the live
+# ISO (via iso/gen-packages.sh -> iso/profile/packages.x86_64).
+# Format: plain package names; '#' comments and blank lines are allowed.
+
+# --- core system -------------------------------------------------------------
+base
+linux
+linux-firmware
+sudo
+networkmanager
+dbus
+util-linux
+e2fsprogs
+dosfstools
+btrfs-progs
+
+# --- command line tools ------------------------------------------------------
+git
+nano
+curl
+jq
+which
+less
+file
+man-db
+man-pages
+
+# --- audio -------------------------------------------------------------------
+pipewire
+wireplumber
+pipewire-pulse
+pipewire-alsa
+alsa-utils
+pavucontrol
+
+# --- desktop plumbing --------------------------------------------------------
+xdg-user-dirs
+xdg-utils
+polkit-gnome
+qt5-wayland
+qt6-wayland
+adwaita-cursors
+adwaita-icon-theme
+gtk4
+python
+python-gobject
+
+# --- fonts -------------------------------------------------------------------
+ttf-jetbrains-mono-nerd
+noto-fonts
+noto-fonts-emoji
+
+# --- applications and helpers referenced by configs / cli scripts ------------
+thunar
+file-roller
+zathura
+zathura-pdf-mupdf
+imv
+fastfetch
+cliphist
+wl-clipboard
+libnotify
+grim
+slurp
+wf-recorder
+brightnessctl
+playerctl
+gammastep
+power-profiles-daemon
+bluez
+bluez-utils
+
+# --- installer / first-run TUI (whiptail) ------------------------------------
+libnewt

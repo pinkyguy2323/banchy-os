@@ -1,0 +1,138 @@
+name: ISO
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+      options: --privileged
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # archiso pulls squashfs-tools, libisoburn (xorriso), dosfstools,
+      # mtools, erofs-utils etc. as hard dependencies, so the list stays lean.
+      # edk2-ovmf (not "ovmf" — that package does not exist on Arch) provides
+      # the OVMF firmware; github-cli is needed by the release step inside the
+      # container (the runner's gh is not mounted into it).
+      - name: Install build dependencies
+        run: pacman -Syu --noconfirm --needed archiso edk2-ovmf qemu-system-x86 expect curl github-cli
+
+      - name: Stage live system into airootfs
+        run: bash scripts/install-files.sh --root iso/profile/airootfs
+
+      - name: Stage repository for the installer
+        run: |
+          set -euo pipefail
+          DST="iso/profile/airootfs/usr/local/src/banchy-os"
+          # Stage outside the checkout first: the destination lives inside
+          # iso/, so copying the repo directly into it would recurse.
+          # --exclude-vcs drops .git; --exclude=iso/profile/airootfs keeps the
+          # already-staged live system from being embedded in the source copy.
+          STAGE="$(mktemp -d)"
+          tar -C . --exclude-vcs --exclude=iso/profile/airootfs -cf - . | tar -C "$STAGE" -xf -
+          mkdir -p "$(dirname "$DST")"
+          mv "$STAGE" "$DST"
+          test -f "$DST/scripts/install-files.sh"
+          test -f "$DST/cli/banchy"
+          test -d "$DST/packages"
+          test -f "$DST/version"
+
+      - name: Generate packages.x86_64
+        run: bash iso/gen-packages.sh
+
+      - name: Build ISO with mkarchiso
+        run: mkarchiso -v -w /tmp/archiso-work -o /tmp/archiso-out iso/profile
+        timeout-minutes: 120
+
+      - name: Normalize artifact
+        run: |
+          set -euo pipefail
+          cd /tmp/archiso-out
+          src="$(find . -maxdepth 1 -type f -name '*.iso' -print -quit)"
+          if [ -z "$src" ]; then
+            echo "::error::mkarchiso produced no .iso file in /tmp/archiso-out"
+            exit 1
+          fi
+          if [ "$src" != "./banchy-os-x86_64.iso" ]; then
+            mv -f "$src" ./banchy-os-x86_64.iso
+          fi
+          sha256sum banchy-os-x86_64.iso > banchy-os-x86_64.iso.sha256
+          cat banchy-os-x86_64.iso.sha256
+          ls -la
+
+      - name: VM smoke test (QEMU + OVMF serial)
+        run: bash scripts/test-vm.sh /tmp/archiso-out/banchy-os-x86_64.iso
+
+      - name: ISO size guard (max 2048 MiB)
+        run: |
+          set -euo pipefail
+          ISO=/tmp/archiso-out/banchy-os-x86_64.iso
+          limit=$((2048 * 1024 * 1024))
+          size="$(stat -c%s "$ISO")"
+          if [ "$size" -gt "$limit" ]; then
+            echo "::error::ISO too large: $((size / 1024 / 1024)) MiB exceeds the 2048 MiB release limit"
+            exit 1
+          fi
+          echo "ISO size: $((size / 1024 / 1024)) MiB (limit 2048 MiB)"
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: banchy-os-x86_64
+          path: |
+            /tmp/archiso-out/banchy-os-x86_64.iso
+            /tmp/archiso-out/banchy-os-x86_64.iso.sha256
+          if-no-files-found: error
+
+      # Triggers are workflow_dispatch + v* tag push, so this guard is
+      # satisfied on every run; the in-script ref check below is what actually
+      # restricts release creation to tags (a workflow_dispatch from a
+      # branch just uploads the artifact above and exits cleanly).
+      - name: Create GitHub release
+        if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+            echo "Ref '$GITHUB_REF' is not a tag - artifact uploaded, no release created."
+            exit 0
+          fi
+          cd /tmp/archiso-out
+          SHA="$(cut -d' ' -f1 banchy-os-x86_64.iso.sha256)"
+          printf '%s\n' \
+            "## Banchy OS ${GITHUB_REF_NAME}" \
+            "" \
+            "- ISO: \`banchy-os-x86_64.iso\`" \
+            "- SHA-256: \`${SHA}\`" \
+            "" \
+            "\`\`\`text" \
+            "${SHA}  banchy-os-x86_64.iso" \
+            "\`\`\`" \
+            "" \
+            "Built from commit \`${GITHUB_SHA}\`." \
+            "" \
+            "Docs: [TESTING.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs/TESTING.md) | [ROADMAP.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs/ROADMAP.md) | [README.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/README.md)" \
+            > notes.md
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release '$GITHUB_REF_NAME' already exists - refreshing assets."
+            gh release upload "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" \
+              banchy-os-x86_64.iso banchy-os-x86_64.iso.sha256 --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" \
+              banchy-os-x86_64.iso banchy-os-x86_64.iso.sha256 \
+              --title "Banchy OS ${GITHUB_REF_NAME}" \
+              --notes-file notes.md
+          fi

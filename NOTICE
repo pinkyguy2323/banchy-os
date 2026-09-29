@@ -1,0 +1,61 @@
+Banchy OS
+Copyright (c) 2026 Banchy OS Contributors
+
+This product includes software developed by the Banchy OS project.
+Licensed under the MIT License (see LICENSE).
+
+--------------------------------------------------------------------------------
+ATTRIBUTION AND UPSTREAM CREDITS
+--------------------------------------------------------------------------------
+
+Banchy OS is an independent Linux distribution. It was technically inspired by
+the architecture and ideas of Omarchy, but it is NOT a fork, reskin or
+derivative work of Omarchy. Unless a file explicitly states otherwise, all
+files in this repository were written from scratch for Banchy OS.
+
+1) Omarchy
+   Project:  https://github.com/omacom/omarchy
+   Author:   David Heinemeier Hansson / Basecamp
+   License:  MIT License
+   Copyright (c) David Heinemeier Hansson
+   Use:      Ideas and architectural inspiration only (installer-based
+             dotfiles distribution, Hyprland desktop concept, theme-based
+             configuration). No Omarchy source code is copied into this
+             repository. Where any future contribution could be derived from
+             Omarchy, this NOTICE will name the file and the upstream source.
+
+2) Arch Linux
+   Project:  https://archlinux.org
+   License:  Various (GPL, GPL-compatible and public domain packages)
+   Use:      Banchy OS is based on Arch Linux. Pacman, AUR compatibility,
+             package metadata and much of the userland come from Arch Linux
+             and its package maintainers. Arch Linux is a trademark of Judd
+             Vinet. Banchy OS is not endorsed by the Arch Linux project.
+
+3) archiso
+   Project:  https://gitlab.archlinux.org/archlinux/archiso
+   License:  GPLv2
+   Use:      The Banchy OS ISO build profile follows the documented archiso
+             profile format (profiledef.sh, airootfs, efiboot directories)
+             and reuses the mkinitcpio "archiso" hook concept provided by the
+             mkinitcpio-archiso package. The releng profile was consulted as
+             documentation for required live-system units (pacman keyring
+             initialization). No GPL-licensed archiso source code is
+             redistributed in this repository beyond short configuration
+             fragments required by the archiso format; those fragments are
+             configuration data, not program code.
+
+4) Hyprland and the Hyprland ecosystem (hyprpaper, hyprlock, hypridle,
+   hyprpicker, waybar, fuzzel, mako, kitty, thunar, ...)
+   License:  MIT / BSD / GPL (see their respective projects)
+   Use:      These upstream open-source components are used as-is as
+             applications and are configured by Banchy OS configuration
+             files. Banchy OS configuration files are original works
+             licensed under the MIT License.
+
+5) Arch Linux package names referenced by Banchy OS profiles and installer
+   remain under the licenses declared by their respective packages.
+   See THIRD_PARTY_LICENSES.md for details.
+
+Trademarks: "Banchy OS" is the name of this distribution. Linux is a
+trademark of Linus Torvalds.

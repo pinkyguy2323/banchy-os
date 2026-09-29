@@ -1,0 +1,17 @@
+# Banchy render manifest.
+# FORMAT: <template relative to this directory> <target relative to HOME> <mode>
+# Targets are installed under $HOME (or --root <dir> for staging).
+hypr-dynamic.conf.tmpl           .config/banchy/generated/hypr-dynamic.conf 644
+hyprlock.conf.tmpl               .config/hypr/hyprlock.conf 644
+hyprpaper.conf.tmpl              .config/hypr/hyprpaper.conf 644
+waybar-config.jsonc.tmpl         .config/waybar/config.jsonc 644
+waybar-style.css.tmpl            .config/waybar/style.css 644
+banchy-colors.conf.tmpl          .config/kitty/banchy-colors.conf 644
+banchy-font.conf.tmpl            .config/kitty/banchy-font.conf 644
+fuzzel.ini.tmpl                  .config/fuzzel/fuzzel.ini 644
+mako/config.tmpl                 .config/mako/config 644
+gtk/gtk.css.tmpl                 .config/gtk-3.0/gtk.css 644
+gtk/gtk-dark.css.tmpl            .config/gtk-3.0/gtk-dark.css 644
+gtk/settings.ini.tmpl            .config/gtk-3.0/settings.ini 644
+gammastep.conf.tmpl              .config/gammastep/config 644
+theme.env.tmpl                   .config/banchy/theme.env 644

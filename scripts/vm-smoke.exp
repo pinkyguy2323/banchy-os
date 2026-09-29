@@ -1,0 +1,140 @@
+#!/usr/bin/expect -f
+# Banchy OS - serial-console smoke driver for scripts/test-vm.sh.
+#
+# Usage (invoked by test-vm.sh):
+#   expect scripts/vm-smoke.exp <timeout-seconds> <qemu-command> [args ...]
+#
+# The QEMU command is passed as separate argv entries and launched with
+# `spawn {*}$qcmd`, so the full command line (including paths with spaces)
+# survives verbatim.  spawn wires QEMU's stdio (-serial stdio) straight to
+# this expect process: `expect` blocks read everything the guest writes to
+# the serial console and `send` writes keystrokes to the serial getty.  No
+# fifos, no log scraping - this is the design that works reliably with
+# getty autologin.
+#
+# Flow: wait for the autologged-in shell prompt (tolerating kernel/systemd
+# log noise and ANSI escapes), run each smoke command with an
+# `echo EXIT_$?` suffix and check the echoed status, then require the
+# BANCHY_SMOKE_DONE marker.  Any failure prints SMOKE_FAIL and exits 1.
+
+if {[llength $argv] < 2} {
+    send_user "usage: vm-smoke.exp <timeout-seconds> <qemu-command> ?args?\n"
+    exit 2
+}
+
+set timeout [lindex $argv 0]
+set qcmd [lrange $argv 1 end]
+
+log_user 1
+match_max 65536
+
+spawn {*}$qcmd
+
+# --- 1. wait for the login shell prompt (outer timeout = boot timeout) -------
+# Branches, in order: a user@host style prompt such as [banchy@banchy ~]$
+# (tolerating ANSI color resets at the end of the buffer); any other shell
+# prompt at the end of the serial stream; a getty login prompt (autologin did
+# not fire - try the live user once, and fail fast if a password is asked);
+# boot timeout; qemu exit.  No comments inside expect{} bodies: comment
+# support there is undocumented, and this script must not depend on it.
+set tried_login 0
+expect {
+    -re {\[[^\]\r\n]*@[^\]\r\n]*\][#$] ?(\x1b\[[0-9;]*m)*$} {
+        send_user "\nSMOKE: login shell prompt detected\n"
+    }
+    -re {[#$] ?(\x1b\[[0-9;]*m)*$} {
+        send_user "\nSMOKE: shell prompt detected\n"
+    }
+    -re {login: $} {
+        if {$tried_login} {
+            send_user "\nSMOKE_FAIL: login prompt returned after sending username (autologin broken)\n"
+            exit 1
+        }
+        set tried_login 1
+        send_user "\nSMOKE: got a login prompt, trying user 'banchy'\n"
+        send "banchy\r"
+        exp_continue
+    }
+    -re {[Pp]assword: ?$} {
+        send_user "\nSMOKE_FAIL: serial console asked for a password (autologin not configured)\n"
+        exit 1
+    }
+    timeout {
+        send_user "\nSMOKE_FAIL: boot timeout\n"
+        exit 1
+    }
+    eof {
+        send_user "\nSMOKE_FAIL: qemu exited before a login prompt appeared\n"
+        exit 1
+    }
+}
+
+# --- 2. smoke commands, one send/expect block each, 60s per command ----------
+proc run_cmd {cmd} {
+    global timeout
+    set saved $timeout
+    set timeout 60
+    # The echoed command line contains the literal 'EXIT_$?' (no digits),
+    # so the EXIT_[0-9]+ match can only hit the shell's expanded output.
+    send -- "$cmd; echo EXIT_\$?\r"
+    set code ""
+    expect {
+        -re {EXIT_([0-9]+)} {
+            set code $expect_out(1,string)
+        }
+        timeout {
+            set code "timeout"
+        }
+        eof {
+            set code "eof"
+        }
+    }
+    set timeout $saved
+    return $code
+}
+
+set failed 0
+set cmds {
+    {banchy version}
+    {banchy theme list}
+    {banchy apply --check}
+    {systemctl is-active NetworkManager}
+    {id banchy}
+}
+foreach cmd $cmds {
+    set code [run_cmd $cmd]
+    if {$code eq "0"} {
+        send_user "SMOKE_OK: $cmd (exit $code)\n"
+    } else {
+        send_user "SMOKE_FAIL: $cmd (exit $code)\n"
+        set failed 1
+        if {$code eq "timeout" || $code eq "eof"} {
+            # The terminal is desynchronised now - stop instead of
+            # sending further commands into a dead or hung shell.
+            exit 1
+        }
+    }
+}
+if {$failed} {
+    send_user "SMOKE_FAIL: one or more smoke commands failed\n"
+    exit 1
+}
+
+# --- 3. done marker ----------------------------------------------------------
+# Matched at line start so the echoed input line does not satisfy it.
+send -- "echo BANCHY_SMOKE_DONE\r"
+set timeout 30
+expect {
+    -re {\r?\nBANCHY_SMOKE_DONE} {
+        send_user "SMOKE_PASS: all smoke checks passed\n"
+        exit 0
+    }
+    timeout {
+        send_user "SMOKE_FAIL: BANCHY_SMOKE_DONE marker not seen within 30s\n"
+        exit 1
+    }
+    eof {
+        send_user "SMOKE_FAIL: qemu exited before the done marker\n"
+        exit 1
+    }
+}

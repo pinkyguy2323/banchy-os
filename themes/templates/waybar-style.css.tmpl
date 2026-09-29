@@ -1,0 +1,114 @@
+/* Managed by Banchy OS — generated file, do not edit.
+   Change theme colors with: banchy theme set <name> / banchy set accent <hex> */
+
+* {
+    font-family: "{{FONT}}", "JetBrains Mono Nerd Font", monospace;
+    font-size: 13px;
+    min-height: 0;
+}
+
+window#waybar {
+    background: rgba({{BG_RGB}}, {{PANEL_ALPHA_F}});
+    border: 1px solid rgba({{BORDER_INACTIVE_RGB}}, 0.65);
+    border-radius: {{BORDER_RADIUS}}px;
+    color: {{TEXT}};
+}
+
+#custom-banchy {
+    color: {{ACCENT}};
+    font-weight: bold;
+    font-size: 15px;
+    padding: 0 14px;
+    border-radius: {{BORDER_RADIUS}}px;
+}
+
+#custom-banchy:hover {
+    background: rgba({{ACCENT_RGB}}, 0.15);
+}
+
+#workspaces {
+    padding: 0 6px;
+}
+
+#workspaces button {
+    padding: 0 8px;
+    color: {{TEXT_DIM}};
+    border-radius: {{BORDER_RADIUS}}px;
+    margin: 2px 1px;
+    transition: all 120ms ease;
+}
+
+#workspaces button:hover {
+    background: rgba({{SURFACE_ALT_RGB}}, 0.85);
+    color: {{TEXT}};
+}
+
+#workspaces button.active {
+    background: rgba({{ACCENT_RGB}}, 0.16);
+    color: {{ACCENT}};
+    box-shadow: inset 0 -2px 0 0 {{ACCENT}};
+}
+
+#workspaces button.urgent {
+    background: rgba({{DANGER_RGB}}, 0.25);
+    color: {{DANGER}};
+}
+
+#window {
+    color: {{TEXT_DIM}};
+    padding: 0 12px;
+    font-size: 12px;
+}
+
+#clock {
+    color: {{TEXT}};
+    font-weight: 600;
+    padding: 0 14px;
+}
+
+#tray,
+#pulseaudio,
+#network,
+#custom-install,
+#custom-power {
+    padding: 0 11px;
+    margin: 0 2px;
+    border-radius: {{BORDER_RADIUS}}px;
+    color: {{TEXT}};
+    background: rgba({{SURFACE_RGB}}, 0.55);
+}
+
+#pulseaudio:hover,
+#network:hover,
+#custom-install:hover,
+#custom-power:hover {
+    background: rgba({{SURFACE_ALT_RGB}}, 0.9);
+}
+
+#pulseaudio.muted {
+    color: {{TEXT_DIM}};
+}
+
+#network.disconnected {
+    color: {{DANGER}};
+}
+
+#custom-install {
+    color: {{ACCENT}};
+    font-weight: bold;
+}
+
+#custom-power {
+    color: {{DANGER}};
+}
+
+tooltip {
+    background: {{BG}};
+    border: 1px solid {{BORDER_INACTIVE}};
+    border-radius: {{BORDER_RADIUS}}px;
+    color: {{TEXT}};
+}
+
+tooltip label {
+    color: {{TEXT}};
+}

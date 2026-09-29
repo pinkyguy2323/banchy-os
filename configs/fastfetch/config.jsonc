@@ -1,0 +1,29 @@
+{
+  // Banchy OS — fastfetch configuration
+  "logo": {
+    "source": "/usr/share/banchy/branding/logo-fastfetch.txt",
+    "padding": { "top": 1, "right": 2 }
+  },
+  "display": {
+    "separator": "  "
+  },
+  "modules": [
+    "title",
+    "separator",
+    "os",
+    "host",
+    "kernel",
+    "uptime",
+    "packages",
+    "shell",
+    "display",
+    "wm",
+    "terminal",
+    "cpu",
+    "memory",
+    "disk",
+    "separator",
+    "custom",
+    "break"
+  ]
+}

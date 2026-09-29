@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# banchy-shot — Banchy OS screenshot tool (grim + slurp).
+set -euo pipefail
+
+MODE="${1:-region}"
+DIR="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
+mkdir -p "$DIR"
+FILE="$DIR/$(date +%Y-%m-%d_%H-%M-%S).png"
+
+notify() {
+  command -v notify-send >/dev/null 2>&1 && {
+    notify-send -u low -i camera-photo "Screenshot" "$1" || true
+  }
+}
+
+case "$MODE" in
+  region|area)
+    GEOM="$(slurp 2>/dev/null)" || exit 1
+    [[ -n "$GEOM" ]] || exit 1
+    grim -g "$GEOM" "$FILE"
+    wl-copy <"$FILE"
+    notify "Region copied: $(basename "$FILE")"
+    ;;
+  screen|full)
+    grim "$FILE"
+    wl-copy <"$FILE"
+    notify "Screen copied: $(basename "$FILE")"
+    ;;
+  window)
+    GEO="$(hyprctl activewindow -j 2>/dev/null | tr -d '\n')"
+    if [[ -z "$GEO" || "$GEO" == "Invalid" ]]; then
+      grim "$FILE"
+    else
+      read -r X Y W H < <(echo "$GEO" | sed -n \
+        's/.*"at":[[:space:]]*\[[[:space:]]*\([0-9-]*\)[[:space:]]*,[[:space:]]*\([0-9-]*\)\].*"size":[[:space:]]*\[[[:space:]]*\([0-9-]*\)[[:space:]]*,[[:space:]]*\([0-9-]*\)\].*/\1 \2 \3 \4/p')
+      if [[ -n "${H:-}" ]]; then
+        grim -g "${X},${Y} ${W}x${H}" "$FILE"
+      else
+        grim "$FILE"
+      fi
+    fi
+    wl-copy <"$FILE"
+    notify "Window copied: $(basename "$FILE")"
+    ;;
+  video)
+    if pgrep -x wf-recorder >/dev/null 2>&1; then
+      pkill -INT -x wf-recorder
+      notify "Recording stopped"
+    else
+      OUT="${XDG_VIDEOS_DIR:-$HOME/Videos}/$(date +%Y-%m-%d_%H-%M-%S).mp4"
+      mkdir -p "$(dirname "$OUT")"
+      setsid -f wf-recorder -f "$OUT" >/dev/null 2>&1
+      notify "Recording started"
+    fi
+    ;;
+  *)
+    echo "usage: banchy-shot [region|screen|window|video]" >&2
+    exit 2
+    ;;
+esac

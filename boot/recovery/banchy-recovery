@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# Banchy OS — recovery menu for the 'Banchy OS - Recovery' boot entry
+# (systemd rescue.target, root shell). Runs from a possibly read-only root:
+# logging goes to /tmp/recovery.log and every step is best-effort.
+set -euo pipefail
+
+R_LOG="${R_LOG:-/tmp/recovery.log}"
+R_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_CHANGED=0
+
+r_log() {
+  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$R_LOG" 2>/dev/null || true
+}
+
+r_pause() {
+  printf '\nPress Enter to continue...'
+  read -r _ || true
+}
+
+r_msg() {
+  # r_msg <title> <text>
+  local title="$1" text="$2"
+  r_log "msgbox ($title): $text"
+  if command -v whiptail >/dev/null 2>&1 && [[ -t 0 && -t 2 ]]; then
+    whiptail --title "$title" --msgbox "$text" 0 74 || true
+  else
+    printf '\n%s\n' "$text"
+    read -rp "[Enter] " _ || true
+  fi
+}
+
+r_menu() {
+  # r_menu <title> <tag> <item>... — echoes the tag, rc 1 on cancel.
+  local title="$1" out="" rc=0
+  shift
+  r_log "menu: $title"
+  if command -v whiptail >/dev/null 2>&1 && [[ -t 0 && -t 2 ]]; then
+    out="$(whiptail --title "$title" --menu "$title" 0 74 0 "$@" 3>&1 1>&2 2>&3)" || rc=$?
+  else
+    local -a tags=() items=()
+    local i
+    while [[ $# -ge 2 ]]; do
+      tags+=("$1")
+      items+=("$2")
+      shift 2
+    done
+    printf '\n%s\n' "$title" >&2
+    for i in "${!tags[@]}"; do
+      printf '  %s) %s\n' "${tags[$i]}" "${items[$i]}" >&2
+    done
+    while true; do
+      read -r -p "> " out || { rc=1; break; }
+      if [[ "$out" =~ ^[0-9]+$ ]] && ((out >= 1 && out <= ${#tags[@]})); then
+        out="${tags[$((out - 1))]}"
+        break
+      fi
+      printf 'invalid choice — enter 1..%s\n' "${#tags[@]}" >&2
+    done
+  fi
+  ((rc)) && return 1
+  printf '%s\n' "$out"
+}
+
+# --- locate the banchy CLI -----------------------------------------------------
+BANCHY_CMD=()
+if command -v banchy >/dev/null 2>&1; then
+  BANCHY_CMD=("$(command -v banchy)")
+elif [[ -x /usr/bin/banchy ]]; then
+  BANCHY_CMD=(/usr/bin/banchy)
+elif [[ -f "$R_DIR/../../cli/banchy" ]]; then
+  BANCHY_CMD=(bash "$R_DIR/../../cli/banchy")
+fi
+
+r_banchy() {
+  if [[ ${#BANCHY_CMD[@]} -gt 0 ]]; then
+    r_log "RUN: banchy $*"
+    "${BANCHY_CMD[@]}" "$@"
+  else
+    printf 'banchy CLI not found on this system\n' >&2
+    return 127
+  fi
+}
+
+r_need_banchy() {
+  if [[ ${#BANCHY_CMD[@]} -eq 0 ]]; then
+    r_msg "Banchy Recovery" "The banchy CLI was not found on this system.
+
+This item needs /usr/bin/banchy (staged by the Banchy installer)."
+    return 1
+  fi
+  return 0
+}
+
+r_remount_rw() {
+  r_log "RUN: mount -o remount,rw /"
+  if mount -o remount,rw /; then
+    ROOT_CHANGED=1
+    r_log "root remounted read-write"
+    r_msg "Banchy Recovery" "Root remounted read-write."
+    return 0
+  fi
+  r_log "FAIL: remount,rw / failed"
+  r_msg "Banchy Recovery" "Could not remount / read-write."
+  return 1
+}
+
+r_fsck_root() {
+  local dev fstype
+  dev="$(findmnt -rn -o SOURCE / 2>/dev/null | head -1 || true)"
+  fstype="$(findmnt -rn -o FSTYPE / 2>/dev/null | head -1 || true)"
+  if [[ -z "$dev" ]]; then
+    r_msg "Filesystem check" "Cannot determine the root device (findmnt failed)."
+    return 0
+  fi
+  if [[ "$fstype" == "btrfs" ]]; then
+    r_msg "Filesystem check" "$dev is btrfs — fsck does not apply (the kernel reports btrfs errors at mount time). Use 'btrfs scrub' from a shell if you suspect corruption."
+    return 0
+  fi
+  r_log "RUN: mount -o remount,ro /"
+  if ! mount -o remount,ro /; then
+    r_log "FAIL: remount,ro / failed — aborting fsck"
+    r_msg "Filesystem check" "Could not remount / read-only — refusing to run fsck on a mounted read-write filesystem."
+    return 0
+  fi
+  printf '\nRunning fsck -f %s (%s)...\n' "$dev" "${fstype:-unknown}"
+  r_log "RUN: fsck -f $dev"
+  fsck -f "$dev" || true
+  printf '\nfsck finished (non-zero exit codes only mean issues were found/fixed).\n'
+  r_log "fsck finished on $dev"
+  return 0
+}
+
+r_hint() {
+  local opts
+  opts="$(findmnt -rn -o OPTIONS / 2>/dev/null | head -1 || true)"
+  if ((ROOT_CHANGED)) && [[ ",$opts," != *",ro,"* ]]; then
+    printf '\nNote: / was remounted read-write by this session.\nTo return to read-only:\n  mount -o remount,ro /\n'
+  fi
+  r_log "recovery menu exited (ROOT_CHANGED=$ROOT_CHANGED)"
+}
+
+main() {
+  r_log "=== banchy-recovery started (pid $$) ==="
+  local choice opts
+  while true; do
+    choice="$(r_menu "Banchy Recovery" \
+      "1" "Run banchy doctor (system health)" \
+      "2" "Verify boot configuration (banchy boot check)" \
+      "3" "Repair bootloader (banchy boot repair)" \
+      "4" "Restore latest config backup (banchy config restore)" \
+      "5" "Reset hyprland config (banchy reset hyprland)" \
+      "6" "Reset root password (remount rw + passwd)" \
+      "7" "Filesystem check (fsck) on the root partition" \
+      "8" "Reboot" \
+      "9" "Exit to shell")" || {
+      r_hint
+      exit 0
+    }
+    case "$choice" in
+      1)
+        r_need_banchy && { r_banchy doctor || true; r_pause; }
+        ;;
+      2)
+        r_need_banchy && { r_banchy boot check || true; r_pause; }
+        ;;
+      3)
+        r_need_banchy && {
+          r_banchy boot repair || true
+          r_pause
+        }
+        ;;
+      4)
+        # banchy config restore (no argument) restores the newest backup in
+        # ~/.local/share/banchy/backups and asks for confirmation itself.
+        r_need_banchy && { r_banchy config restore || true; r_pause; }
+        ;;
+      5)
+        r_need_banchy && { r_banchy reset hyprland || true; r_pause; }
+        ;;
+      6)
+        if ((ROOT_CHANGED == 0)); then
+          opts="$(findmnt -rn -o OPTIONS / 2>/dev/null | head -1 || true)"
+          if [[ ",$opts," == *",ro,"* ]]; then
+            r_remount_rw || {
+              r_pause
+              continue
+            }
+          fi
+        fi
+        r_log "RUN: passwd (root password reset)"
+        passwd || true
+        r_pause
+        ;;
+      7)
+        r_fsck_root || true
+        r_pause
+        ;;
+      8)
+        r_log "RUN: systemctl reboot"
+        systemctl reboot || reboot || true
+        ;;
+      9)
+        r_hint
+        exit 0
+        ;;
+    esac
+  done
+}
+
+main "$@"

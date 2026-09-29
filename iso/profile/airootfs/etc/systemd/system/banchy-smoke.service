@@ -1,0 +1,15 @@
+[Unit]
+Description=Banchy OS live ISO smoke test (CI marker)
+# Only on the live ISO (/etc/banchy-live exists in the airootfs overlay only).
+# Ordered after the live setup (user exists) and NetworkManager (so
+# is-active does not race the unit starting).
+ConditionPathExists=/etc/banchy-live
+After=banchy-live-setup.service NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/banchy-smoke.sh
+
+[Install]
+WantedBy=multi-user.target

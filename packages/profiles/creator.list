@@ -1,0 +1,7 @@
+# desc: default plus creative applications (OBS Studio, Blender, GIMP, Kdenlive, Krita)
+@default
+obs-studio
+blender
+gimp
+kdenlive
+krita

@@ -1,0 +1,42 @@
+# Managed by Banchy OS — generated file, do not edit.
+# Change values with: banchy set <key> <value>   (then: banchy apply)
+
+$accent = {{ACCENT}}
+$accent_alt = {{ACCENT_ALT}}
+$text = {{TEXT}}
+$surface = {{SURFACE}}
+
+general {
+    gaps_in = {{GAPS_IN}}
+    gaps_out = {{GAPS_OUT}}
+    border_size = {{BORDER_SIZE}}
+    col.active_border = rgb({{BORDER_ACTIVE_RAW}}) rgb({{ACCENT_ALT_RAW}}) 45deg
+    col.inactive_border = rgb({{BORDER_INACTIVE_RAW}})
+    layout = dwindle
+}
+
+decoration {
+    rounding = {{BORDER_RADIUS}}
+    active_opacity = {{ACTIVE_OPACITY}}
+    inactive_opacity = {{INACTIVE_OPACITY}}
+
+    blur {
+        enabled = {{BLUR_ENABLED}}
+        size = 6
+        passes = 2
+        vibrancy = 0.17
+        ignore_opacity = false
+    }
+}
+
+animations {
+    enabled = {{ANIM_ENABLED}}
+    animation = windows, 1, {{ANIM_S_WINDOW}}, default
+    animation = border, 1, {{ANIM_S_BORDER}}, default
+    animation = fade, 1, {{ANIM_S_FADE}}, default
+    animation = workspaces, 1, {{ANIM_S_WORKSPACE}}, default
+}
+
+env = XCURSOR_SIZE,{{CURSOR_SIZE}}
+env = XCURSOR_THEME,{{CURSOR_THEME}}
+env = HYPRCURSOR_SIZE,{{CURSOR_SIZE}}

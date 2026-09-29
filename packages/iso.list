@@ -1,0 +1,24 @@
+# Banchy OS — live-ISO-only packages (not installed on the target system).
+# Deduplicated against base.list / desktop.list by iso/gen-packages.sh.
+
+# --- CPU microcode -----------------------------------------------------------
+# The mkinitcpio 'microcode' hook (see iso/profile/airootfs/etc/mkinitcpio.conf.d/
+# archiso.conf, HOOKS copied from archiso releng) embeds these into the initramfs,
+# which is why the systemd-boot entries need no separate microcode initrd line.
+intel-ucode
+amd-ucode
+
+# --- kernel (must always be present on the ISO) ------------------------------
+linux
+
+# --- installer / live tooling not needed on the target -----------------------
+arch-install-scripts
+gptfdisk
+parted
+efibootmgr
+rsync
+
+# --- UEFI boot menu extras (releng ships these; mkarchiso reports them) ------
+edk2-shell
+memtest86+
+memtest86+-efi

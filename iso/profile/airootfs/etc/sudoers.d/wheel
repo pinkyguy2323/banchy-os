@@ -1,0 +1,3 @@
+# Allow members of group wheel to run any command as any user.
+# Mode 0440 is enforced by profiledef.sh (file_permissions).
+%wheel ALL=(ALL:ALL) ALL
