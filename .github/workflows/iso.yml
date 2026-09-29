@@ -33,11 +33,16 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/install-files.sh --root iso/profile/airootfs
-          # Drop pacman hooks from the live image: they are meant for the
-          # installed system (the installer stages them into /mnt itself).
-          # During mkarchiso's pacstrap they would fire against a half-built
-          # airootfs (Exec of the target /usr/bin from the build chroot).
+          # pacman hooks are for the installed system only (the installer
+          # stages them into /mnt); during pacstrap they would fire against a
+          # half-built airootfs (Exec of the target /usr/bin from the build
+          # chroot).
           rm -rf iso/profile/airootfs/etc/pacman.d/hooks
+          # Diagnostics for the smoke test: modes of staged executables.
+          stat -c 'STAGED %a %U:%G %n' \
+            iso/profile/airootfs/usr/bin/banchy \
+            iso/profile/airootfs/usr/local/bin/banchy-live-setup.sh \
+            iso/profile/airootfs/etc/hostname || true
 
       - name: Stage repository for the installer
         run: |
@@ -65,6 +70,12 @@ jobs:
           mkarchiso -v -w /tmp/archiso-work -o /tmp/archiso-out iso/profile 2>&1 \
             | tee /tmp/mkarchiso.log
           rc=${PIPESTATUS[0]}
+          # Diagnostics: modes of the same files after mkarchiso's overlay
+          # copy (cp --no-preserve=mode) and pacstrap, before squashing.
+          stat -c 'BUILT %a %U:%G %n' \
+            /tmp/archiso-work/x86_64/airootfs/usr/bin/banchy \
+            /tmp/archiso-work/x86_64/airootfs/usr/local/bin/banchy-live-setup.sh \
+            /tmp/archiso-work/x86_64/airootfs/etc/hostname 2>/dev/null || true
           if [ "$rc" -ne 0 ]; then exit "$rc"; fi
           # mkarchiso exits 0 even when initramfs/pacstrap scriptlets fail
           # ("The image may not be complete") — treat these as build failures,

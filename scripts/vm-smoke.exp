@@ -95,6 +95,7 @@ proc run_cmd {cmd} {
 
 set failed 0
 set cmds {
+    {ls -l /usr/bin/banchy /usr/local/bin/banchy-smoke.sh /usr/lib/banchy/common.sh /usr/share/banchy/version; findmnt -no FSTYPE,OPTIONS /; true}
     {banchy version}
     {banchy theme list}
     {banchy apply --check}

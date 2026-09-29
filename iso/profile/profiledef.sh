@@ -40,8 +40,21 @@ airootfs_image_tool_options=('-comp' 'xz' '-Xbcj' 'x86,arm64' '-b' '1M' '-Xdict-
 # Declared -g so the file is valid both when sourced at top level and when
 # mkarchiso sources it from inside _read_profile() (releng relies on mkarchiso's
 # own `declare -A file_permissions=()`; -g keeps the global binding either way).
+# These are applied AFTER the overlay copy (cp --no-preserve=mode), so every
+# executable we stage explicitly gets its final mode — the live smoke test
+# runs them as the unprivileged user and needs r-x for others.
 declare -gA file_permissions=(
   ["/etc/sudoers.d/wheel"]="0:0:440"
   ["/usr/local/bin/banchy-live-setup.sh"]="0:0:755"
   ["/usr/local/bin/banchy-smoke.sh"]="0:0:755"
+  ["/usr/bin/banchy"]="0:0:755"
+  ["/usr/bin/banchy-boot-hook"]="0:0:755"
+  ["/usr/bin/banchy-clip"]="0:0:755"
+  ["/usr/bin/banchy-powermenu"]="0:0:755"
+  ["/usr/bin/banchy-shot"]="0:0:755"
+  ["/usr/bin/banchy-welcome"]="0:0:755"
+  ["/usr/bin/banchy-settings"]="0:0:755"
+  ["/usr/bin/banchy-cc"]="0:0:755"
+  ["/usr/bin/banchy-install"]="0:0:755"
+  ["/usr/share/banchy/recovery/banchy-recovery"]="0:0:755"
 )
