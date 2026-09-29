@@ -22,3 +22,15 @@ rsync
 edk2-shell
 memtest86+
 memtest86+-efi
+
+# --- initramfs hooks required by HOOKS in airootfs/etc/mkinitcpio.conf.d/ ----
+# mkinitcpio-archiso: the archiso/archiso_loop_mnt/archiso_pxe_* hooks (copied
+#   from releng) — without it mkinitcpio errors "Hook 'archiso' cannot be
+#   found", the initramfs has no root-finding logic and boot dies in emergency
+#   shell with "Failed to mount '' on real root".
+mkinitcpio-archiso
+mkinitcpio-nfs-utils
+# syslinux: provides memdiskfind used by the mkinitcpio 'memdisk' hook (releng
+#   ships syslinux too).
+syslinux
+squashfs-tools

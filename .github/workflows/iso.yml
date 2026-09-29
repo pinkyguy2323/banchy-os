@@ -30,7 +30,14 @@ jobs:
         run: pacman -Syu --noconfirm --needed archiso edk2-ovmf qemu-system-x86 expect curl github-cli
 
       - name: Stage live system into airootfs
-        run: bash scripts/install-files.sh --root iso/profile/airootfs
+        run: |
+          set -euo pipefail
+          bash scripts/install-files.sh --root iso/profile/airootfs
+          # Drop pacman hooks from the live image: they are meant for the
+          # installed system (the installer stages them into /mnt itself).
+          # During mkarchiso's pacstrap they would fire against a half-built
+          # airootfs (Exec of the target /usr/bin from the build chroot).
+          rm -rf iso/profile/airootfs/etc/pacman.d/hooks
 
       - name: Stage repository for the installer
         run: |
@@ -53,7 +60,20 @@ jobs:
         run: bash iso/gen-packages.sh
 
       - name: Build ISO with mkarchiso
-        run: mkarchiso -v -w /tmp/archiso-work -o /tmp/archiso-out iso/profile
+        run: |
+          set -euo pipefail
+          mkarchiso -v -w /tmp/archiso-work -o /tmp/archiso-out iso/profile 2>&1 \
+            | tee /tmp/mkarchiso.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then exit "$rc"; fi
+          # mkarchiso exits 0 even when initramfs/pacstrap scriptlets fail
+          # ("The image may not be complete") — treat these as build failures,
+          # otherwise we ship an ISO that only dies at boot.
+          if grep -qE "==> ERROR:|call to execv failed|command failed to execute correctly" /tmp/mkarchiso.log; then
+            echo "::error::mkarchiso reported fatal errors:"
+            grep -E -B2 -A2 "==> ERROR:|call to execv failed|command failed to execute correctly" /tmp/mkarchiso.log || true
+            exit 1
+          fi
         timeout-minutes: 120
 
       - name: Normalize artifact

@@ -32,6 +32,9 @@ echo "build-iso: generating package list"
 
 echo "build-iso: staging live system into airootfs"
 ./scripts/install-files.sh --root iso/profile/airootfs
+# pacman hooks are for the installed system only (the installer stages them
+# into /mnt); during pacstrap they would fire against a half-built airootfs.
+rm -rf iso/profile/airootfs/etc/pacman.d/hooks
 
 echo "build-iso: staging repository source for the installer"
 SRC="iso/profile/airootfs/usr/local/src/banchy-os"
@@ -42,9 +45,17 @@ tar --exclude-vcs --exclude=iso/profile/airootfs -cf - . | tar -C "$SRC" -xf -
 mkdir -p "$OUT"
 echo "build-iso: running mkarchiso (output: $OUT)"
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-  mkarchiso -v -w "$REPO/work" -o "$OUT" iso/profile
+  mkarchiso -v -w "$REPO/work" -o "$OUT" iso/profile 2>&1 | tee "$OUT/mkarchiso.log"
 else
-  sudo mkarchiso -v -w "$REPO/work" -o "$OUT" iso/profile
+  sudo mkarchiso -v -w "$REPO/work" -o "$OUT" iso/profile 2>&1 | tee "$OUT/mkarchiso.log"
+fi
+rc=${PIPESTATUS[0]}
+[[ "$rc" -eq 0 ]] || { echo "build-iso: mkarchiso failed (rc=$rc)" >&2; exit "$rc"; }
+# mkarchiso can exit 0 with fatal scriptlet/initramfs errors — fail hard.
+if grep -qE "==> ERROR:|call to execv failed|command failed to execute correctly" "$OUT/mkarchiso.log"; then
+  echo "build-iso: mkarchiso reported fatal errors:" >&2
+  grep -E -B2 -A2 "==> ERROR:|call to execv failed|command failed to execute correctly" "$OUT/mkarchiso.log" >&2 || true
+  exit 1
 fi
 
 echo "build-iso: normalizing artifact name"
