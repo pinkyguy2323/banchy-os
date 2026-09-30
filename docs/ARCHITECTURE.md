@@ -2,7 +2,7 @@
 
 This document describes how the Banchy OS repository is laid out and how its
 main pieces fit together. Banchy OS is an independent Arch Linux based
-distribution (version 0.1.0, rolling release).
+distribution (version 0.1.1, rolling release).
 
 ## Design principles
 
@@ -17,7 +17,7 @@ distribution (version 0.1.0, rolling release).
 ```
 banchy-os/
 ├── installer/        # Banchy Installer (TUI + unattended), lib/ helpers
-├── iso/              # archiso profile (iso/profile/: profiledef.sh, airootfs, efiboot)
+├── iso/              # archiso profile (iso/profile/: profiledef.sh, airootfs, efiboot, syslinux)
 ├── packages/         # package profile lists (packages/profiles/*.list)
 ├── configs/          # default user configs (hypr/, waybar/, kitty/, fuzzel/,
 │                     #   mako/, hyprlock/, hyprpaper/, hypridle/, fastfetch/,
@@ -41,7 +41,7 @@ banchy-os/
 | Component | Role |
 | --- | --- |
 | `installer/` | `banchy-install` — whiptail TUI and unattended (`--unattended answers.conf`) installation; `lib/` holds shared helpers. Runs partitioning (GPT + UEFI), file copy, user/profile/theme setup, and the verification gate. |
-| `iso/` | archiso profile consumed by `scripts/build-iso.sh` and `.github/workflows/iso.yml`: `iso/profile/` holds `profiledef.sh`, `pacman.conf`, `airootfs/` (live system content), `efiboot/` (UEFI boot content). |
+| `iso/` | archiso profile consumed by `scripts/build-iso.sh` and `.github/workflows/iso.yml`: `iso/profile/` holds `profiledef.sh`, `pacman.conf`, `airootfs/` (live system content), `efiboot/` (UEFI boot content), `syslinux/` (legacy BIOS boot content). |
 | `packages/` | One `.list` file per profile under `packages/profiles/`, consumed by `banchy profile <name>` and the installer. |
 | `configs/` | Default user configuration files installed to `~/.config/` (Hyprland, Waybar, kitty, fuzzel, mako, hyprlock, hyprpaper, hypridle, fastfetch, GTK). |
 | `themes/` | Five bundled themes plus `templates/` (`*.tmpl` with `{{KEY}}` placeholders) that drive the Theme Engine render pipeline. |

@@ -2,7 +2,7 @@
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 ![Based on: Arch Linux](https://img.shields.io/badge/base-Arch%20Linux-1793d1)
-![Version: 0.1.0](https://img.shields.io/badge/version-0.1.0-green)
+![Version: 0.1.1](https://img.shields.io/badge/version-0.1.1-green)
 
 **Banchy OS** is an Arch Linux based distribution built around Hyprland. It ships a
 complete, themed desktop with a first-class CLI (`banchy`), a safe boot setup, an
@@ -47,7 +47,9 @@ Every critical change gets validation, backup, fallback, and rollback.
    sha256sum -c banchy-os-x86_64.iso.sha256
    ```
 
-3. Flash it to a USB drive and boot it on a **UEFI** machine.
+3. Flash it to a USB drive and boot it — the ISO boots in **UEFI** and legacy
+   **BIOS** mode (installing the system currently requires UEFI; see
+   [docs/INSTALLATION.md](docs/INSTALLATION.md)).
 4. Run the installer from the live environment:
 
    ```bash
@@ -170,7 +172,7 @@ Details: [docs/RECOVERY.md](docs/RECOVERY.md).
 
 ## Status
 
-**v0.1.0 — see [ROADMAP.md](docs/ROADMAP.md) for test status; check the
+**v0.1.1 — see [ROADMAP.md](docs/ROADMAP.md) for test status; check the
 [releases page](https://github.com/pinkyguy2323/banchy-os/releases) for the
 current build state.**
 

@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 for tagged releases while the base system itself rolls forward on Arch Linux.
 
+## [0.1.1] - 2026-09-30
+
+### Fixed
+
+- **ISO now boots in legacy BIOS mode as well as UEFI.** The 0.1.0 ISO was
+  UEFI-only (`bootmodes=('uefi.systemd-boot')`), so firmware defaulting to
+  legacy BIOS — VirtualBox, older PCs — reported *"No bootable medium found"*.
+  The profile now also builds the `bios.syslinux` El Torito/isohybrid boot
+  path with a branded SYSLINUX menu (`iso/profile/syslinux/`), mirroring the
+  archiso releng profile.
+
+### Changed
+
+- CI smoke-tests both firmware paths after every ISO build: QEMU + OVMF
+  (UEFI/systemd-boot) and QEMU + SeaBIOS (`scripts/test-vm.sh --bios`,
+  BIOS/SYSLINUX).
+
 ## [0.1.0] - 2026-09-29
 
 Initial release.
@@ -64,4 +81,5 @@ Initial release.
 - **Documentation**: architecture, installation, boot, recovery,
   customization, testing, development, Omarchy differences, and roadmap.
 
+[0.1.1]: https://github.com/pinkyguy2323/banchy-os/releases/tag/v0.1.1
 [0.1.0]: https://github.com/pinkyguy2323/banchy-os/releases

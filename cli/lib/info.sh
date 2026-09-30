@@ -30,7 +30,7 @@ banchy_cmd_info() {
   cat "$BANCHY_SHARE/branding/logo-ascii.txt" 2>/dev/null || echo "Banchy OS"
   printf '%s\n' "${C_RESET}"
 
-  printf '  %-12s %s\n' "OS" "Banchy OS $(cat "$BANCHY_SHARE/version" 2>/dev/null || echo "${BANCHY_VERSION:-0.1.0}")"
+  printf '  %-12s %s\n' "OS" "Banchy OS $(cat "$BANCHY_SHARE/version" 2>/dev/null || echo "${BANCHY_VERSION:-0.1.1}")"
   printf '  %-12s %s\n' "Base" "Arch Linux (rolling)"
   printf '  %-12s %s\n' "Kernel" "$kernel"
   printf '  %-12s %s\n' "WM" "$wm"

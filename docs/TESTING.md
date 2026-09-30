@@ -60,24 +60,27 @@ banchy-test full       # everything above plus integration checks
 Results are colorized `[OK]` / `[WARN]` / `[FAIL]` and logged to
 `~/.local/state/banchy/banchy.log`.
 
-## VM smoke test (QEMU + OVMF)
+## VM smoke test (QEMU + OVMF / SeaBIOS)
 
 ```bash
-scripts/test-vm.sh
+scripts/test-vm.sh <iso>          # UEFI boot (OVMF firmware)
+scripts/test-vm.sh --bios <iso>   # legacy BIOS boot (SeaBIOS, El Torito/SYSLINUX)
 ```
 
-- Boots the built ISO in QEMU with OVMF (UEFI firmware)
+- Boots the built ISO in QEMU — OVMF (UEFI) by default, SeaBIOS with `--bios`
 - Drives the serial console with expect (`scripts/vm-smoke.exp`)
-- Writes logs to `test-results/` (including `test-results/summary.md`)
+- Writes logs to `test-results/` (`vm-smoke.log` / `vm-smoke-bios.log`,
+  including `test-results/summary.md`)
 
-This is the same harness CI uses after building the ISO.
+This is the same harness CI uses after building the ISO — CI runs **both**
+firmware modes.
 
 ## CI pipelines
 
 | Workflow | Trigger | Steps |
 | --- | --- | --- |
 | `ci.yml` | push, pull request | `scripts/lint.sh` → `tests/run.sh` |
-| `iso.yml` | push (main), tag `v*` | Build ISO in a privileged `archlinux` container with `mkarchiso` → QEMU serial smoke test of the ISO → on `v*` tags create a GitHub Release with `banchy-os-x86_64.iso` + `.sha256` |
+| `iso.yml` | push (main), tag `v*` | Build ISO in a privileged `archlinux` container with `mkarchiso` → QEMU serial smoke tests of the ISO in **both** firmware modes (UEFI/OVMF + legacy BIOS/SeaBIOS) → on `v*` tags create a GitHub Release with `banchy-os-x86_64.iso` + `.sha256` |
 
 ## Release gates
 

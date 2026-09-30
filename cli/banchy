@@ -3,7 +3,7 @@
 # Entry point: dispatches to banchy_cmd_* functions defined in lib/.
 set -euo pipefail
 
-BANCHY_VERSION="0.1.0"
+BANCHY_VERSION="0.1.1"
 
 _banchy_self="${BASH_SOURCE[0]}"
 # Resolve to an absolute path (for sudo re-exec later).

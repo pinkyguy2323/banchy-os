@@ -5,7 +5,7 @@
 # Key set mirrors the official archiso releng profile:
 # https://raw.githubusercontent.com/archlinux/archiso/master/configs/releng/profiledef.sh
 
-# --- iso_version: read the repository version file, fall back to 0.1.0 -------
+# --- iso_version: read the repository version file, fall back to 0.1.1 -------
 # mkarchiso sources this file after cd'ing into the profile directory, so both
 # the path derived from BASH_SOURCE and the cwd-relative path are tried.
 _banchy_version=""
@@ -18,7 +18,7 @@ for _banchy_version_file in "${_banchy_dir:+${_banchy_dir}/../../version}" "../.
   _banchy_version="$(tr -d '[:space:]' <"${_banchy_version_file}")" || _banchy_version=""
   break
 done
-[[ "${_banchy_version}" =~ ^[0-9A-Za-z.+-]+$ ]] || _banchy_version="0.1.0"
+[[ "${_banchy_version}" =~ ^[0-9A-Za-z.+-]+$ ]] || _banchy_version="0.1.1"
 unset _banchy_dir _banchy_version_file
 
 # --- profile (releng key set) ------------------------------------------------
@@ -31,7 +31,8 @@ unset _banchy_version
 
 install_dir="banchy"
 arch="x86_64"
-bootmodes=('uefi.systemd-boot')
+bootmodes=('bios.syslinux'
+           'uefi.systemd-boot')
 pacman_conf="pacman.conf"
 
 airootfs_image_type="squashfs"

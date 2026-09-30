@@ -162,7 +162,7 @@ b_render_env() {
 
   # Misc.
   B_ENV[NIGHT_LOCATION]="${B_SET[night_location]:-0,0}"
-  B_ENV[BANCHY_VERSION]="${BANCHY_VERSION:-0.1.0}"
+  B_ENV[BANCHY_VERSION]="${BANCHY_VERSION:-0.1.1}"
 
   return 0
 }

@@ -1,6 +1,6 @@
 # Roadmap
 
-Banchy OS v0.1.0. Status of the twelve build phases and the release test
+Banchy OS v0.1.1. Status of the twelve build phases and the release test
 gates. **Nothing is claimed as tested until CI reports it.**
 
 Status values used below:
@@ -22,7 +22,7 @@ Status values used below:
 | 7 | Welcome | `banchy-welcome` first-run wizard, `first-run-done` trigger, `banchy welcome` | implemented (code complete) |
 | 8 | Installer | `banchy-install` whiptail TUI flow, `--unattended answers.conf`, verify gate, install log | implemented (code complete) |
 | 9 | ISO | archiso profile (`iso/profile/`), `scripts/build-iso.sh` + `install-files.sh`, `out/banchy-os-*.iso`, sha256 artifacts | implemented (code complete) |
-| 10 | QEMU/KVM testing | `scripts/test-vm.sh` (QEMU + OVMF, serial console via expect), `scripts/vm-smoke.exp`, `tests/vm/`, CI ISO build → serial smoke | in CI pipeline |
+| 10 | QEMU/KVM testing | `scripts/test-vm.sh` (QEMU + OVMF/SeaBIOS for UEFI and legacy BIOS, serial console via expect), `scripts/vm-smoke.exp`, `tests/vm/`, CI ISO build → serial smoke (both firmwares) | in CI pipeline |
 | 11 | Update/rollback testing | `banchy update` pre/post-checks, config backup/restore, boot fallback verification, btrfs snapshot restore, rollback guidance | in CI pipeline |
 | 12 | Documentation/release | docs/, README, CONTRIBUTING, CHANGELOG, THIRD_PARTY_LICENSES, CI release job (`iso.yml` → GitHub Release on `v*` tags) | in progress |
 
