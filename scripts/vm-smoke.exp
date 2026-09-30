@@ -122,8 +122,12 @@ if {$failed} {
 }
 
 # --- 3. done marker ----------------------------------------------------------
-# Matched at line start so the echoed input line does not satisfy it.
-send -- "echo BANCHY_SMOKE_DONE\r"
+# Two echoes: bash 5 prepends an OSC 3008 journal frame directly to the first
+# command's output (no newline before it), so a plain "echo BANCHY_SMOKE_DONE"
+# would never match \r?\nBANCHY_SMOKE_DONE. The leading empty echo prints the
+# newline the pattern needs. Matched at line start so the echoed input line
+# does not satisfy it.
+send -- "echo; echo BANCHY_SMOKE_DONE\r"
 set timeout 30
 expect {
     -re {\r?\nBANCHY_SMOKE_DONE} {

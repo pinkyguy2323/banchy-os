@@ -22,9 +22,18 @@ b_paths_init() {
   fi
   export BANCHY_SHARE
 
-  local xdg_config="${XDG_CONFIG_HOME:-$HOME/.config}"
-  local xdg_state="${XDG_STATE_HOME:-$HOME/.local/state}"
-  local xdg_data="${XDG_DATA_HOME:-$HOME/.local/share}"
+  # $HOME is not set for system services; resolve it from passwd so the CLI
+  # (set -u) never dies on an unbound variable when run from a unit/hook.
+  local _home="${HOME:-}"
+  if [[ -z "$_home" ]]; then
+    _home="$(getent passwd -- "$(id -u)" 2>/dev/null | cut -d: -f6)" || _home=""
+  fi
+  : "${_home:=/}"
+  export HOME="${HOME:-$_home}"
+
+  local xdg_config="${XDG_CONFIG_HOME:-$_home/.config}"
+  local xdg_state="${XDG_STATE_HOME:-$_home/.local/state}"
+  local xdg_data="${XDG_DATA_HOME:-$_home/.local/share}"
   BANCHY_USER_DIR="$xdg_config/banchy"
   BANCHY_STATE_DIR="$xdg_state/banchy"
   BANCHY_BACKUP_DIR="$xdg_data/banchy/backups"

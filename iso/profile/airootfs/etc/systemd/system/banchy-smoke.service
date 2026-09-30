@@ -9,6 +9,9 @@ After=banchy-live-setup.service NetworkManager.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# System services get no $HOME by default; the CLI resolves XDG paths from it
+# under `set -u` and would abort with "unbound variable".
+Environment=HOME=/root
 ExecStart=/usr/local/bin/banchy-smoke.sh
 
 [Install]
