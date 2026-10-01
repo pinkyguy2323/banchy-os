@@ -1,6 +1,6 @@
 # Roadmap
 
-Banchy OS v0.1.1. Status of the twelve build phases and the release test
+Banchy OS v0.2.0. Status of the twelve build phases and the release test
 gates. **Nothing is claimed as tested until CI reports it.**
 
 Status values used below:

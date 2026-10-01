@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 for tagged releases while the base system itself rolls forward on Arch Linux.
 
+## [0.2.0] - 2026-10-01
+
+### Added
+
+- **Graphical login (SDDM + Hyprland autostart).** Nothing previously
+  started a graphical session: a fresh boot ended at a console prompt and
+  the desktop had to be launched by hand. The system now boots to a display
+  manager — the live ISO autologins `banchy` straight into the Hyprland
+  desktop (`/etc/sddm.conf.d/autologin.conf` written by
+  `banchy-live-setup.service`), and installed systems show an SDDM login
+  screen for the user created by the installer (`systemctl enable sddm.service`,
+  default target `graphical.target`).
+- **VM smoke proves the graphical stack**: `systemctl is-active
+  display-manager` and a live `Hyprland` process are now required checks in
+  `scripts/vm-smoke.exp` (both firmware modes).
+- `packages/desktop.list` ships `sddm` + `xorg-server` (X11 greeter).
+
+### Changed
+
+- The tty1 getty autologin drop-in is removed — SDDM owns tty1 now (the
+  serial autologin on ttyS0 used by the smoke harness is unchanged).
+
 ## [0.1.1] - 2026-09-30
 
 ### Fixed
@@ -81,5 +103,6 @@ Initial release.
 - **Documentation**: architecture, installation, boot, recovery,
   customization, testing, development, Omarchy differences, and roadmap.
 
+[0.2.0]: https://github.com/pinkyguy2323/banchy-os/releases/tag/v0.2.0
 [0.1.1]: https://github.com/pinkyguy2323/banchy-os/releases/tag/v0.1.1
 [0.1.0]: https://github.com/pinkyguy2323/banchy-os/releases

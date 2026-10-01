@@ -69,6 +69,9 @@ scripts/test-vm.sh --bios <iso>   # legacy BIOS boot (SeaBIOS, El Torito/SYSLINU
 
 - Boots the built ISO in QEMU — OVMF (UEFI) by default, SeaBIOS with `--bios`
 - Drives the serial console with expect (`scripts/vm-smoke.exp`)
+- Checks the live session end to end: serial autologin prompt, `banchy` CLI
+  smoke commands, `NetworkManager`, an **active `display-manager` (SDDM)** and
+  a **running Hyprland compositor**
 - Writes logs to `test-results/` (`vm-smoke.log` / `vm-smoke-bios.log`,
   including `test-results/summary.md`)
 

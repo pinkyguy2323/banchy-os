@@ -2,7 +2,7 @@
 
 This document describes how the Banchy OS repository is laid out and how its
 main pieces fit together. Banchy OS is an independent Arch Linux based
-distribution (version 0.1.1, rolling release).
+distribution (version 0.2.0, rolling release).
 
 ## Design principles
 

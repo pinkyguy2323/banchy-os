@@ -436,8 +436,9 @@ step_seed_user() {
 
 step_services() {
   b_header "Enabling services"
-  run_chroot systemctl enable NetworkManager.service fstrim.timer
-  b_ok "enabled: NetworkManager.service, fstrim.timer"
+  run_chroot systemctl enable NetworkManager.service fstrim.timer sddm.service
+  run_chroot systemctl set-default graphical.target
+  b_ok "enabled: NetworkManager.service, fstrim.timer, sddm.service (graphical login)"
 }
 
 run_install_steps() {

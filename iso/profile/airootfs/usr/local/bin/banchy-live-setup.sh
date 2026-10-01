@@ -19,4 +19,13 @@ if command -v locale-gen >/dev/null 2>&1; then
   locale-gen >/dev/null 2>&1 || true
 fi
 
+# Graphical login: SDDM autologins the live user straight into Hyprland
+# (written before display-manager.service starts - see the unit ordering).
+mkdir -p /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/autologin.conf <<'EOF'
+[Autologin]
+User=banchy
+Session=hyprland.desktop
+EOF
+
 echo BANCHY_LIVE_SETUP_OK > /dev/console 2>/dev/null || true

@@ -12,3 +12,7 @@ fuzzel
 hyprlock
 hyprpaper
 hypridle
+
+# --- display manager (graphical login; live autologins into Hyprland) ---------
+sddm
+xorg-server

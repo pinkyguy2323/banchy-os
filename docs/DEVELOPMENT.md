@@ -145,7 +145,7 @@ A release is only published when **all** release gates pass (see
 
 ## Versioning and releases
 
-- Current version: `0.1.1` (see the `version` file).
+- Current version: `0.2.0` (see the `version` file).
 - Rolling base on Arch Linux; the project itself uses tagged releases.
 - Changelog: [../CHANGELOG.md](../CHANGELOG.md), Keep-a-Changelog format,
   short imperative commit subjects.

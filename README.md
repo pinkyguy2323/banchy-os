@@ -2,7 +2,7 @@
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 ![Based on: Arch Linux](https://img.shields.io/badge/base-Arch%20Linux-1793d1)
-![Version: 0.1.1](https://img.shields.io/badge/version-0.1.1-green)
+![Version: 0.2.0](https://img.shields.io/badge/version-0.2.0-green)
 
 **Banchy OS** is an Arch Linux based distribution built around Hyprland. It ships a
 complete, themed desktop with a first-class CLI (`banchy`), a safe boot setup, an
@@ -35,6 +35,9 @@ Every critical change gets validation, backup, fallback, and rollback.
   Large packages are only installed on explicit choice.
 - **Installer** — whiptail TUI or fully unattended (`--unattended answers.conf`),
   with a verify gate that must pass before reboot is offered.
+- **Graphical login** — SDDM display manager: the live ISO autologins into
+  the Hyprland desktop, installed systems show a login screen with the user
+  created during install.
 
 ## Quick start
 
@@ -49,7 +52,8 @@ Every critical change gets validation, backup, fallback, and rollback.
 
 3. Flash it to a USB drive and boot it — the ISO boots in **UEFI** and legacy
    **BIOS** mode (installing the system currently requires UEFI; see
-   [docs/INSTALLATION.md](docs/INSTALLATION.md)).
+   [docs/INSTALLATION.md](docs/INSTALLATION.md)). The live session opens the
+   **Hyprland desktop automatically** (SDDM autologin as `banchy` / `banchy`).
 4. Run the installer from the live environment:
 
    ```bash
@@ -172,7 +176,7 @@ Details: [docs/RECOVERY.md](docs/RECOVERY.md).
 
 ## Status
 
-**v0.1.1 — see [ROADMAP.md](docs/ROADMAP.md) for test status; check the
+**v0.2.0 — see [ROADMAP.md](docs/ROADMAP.md) for test status; check the
 [releases page](https://github.com/pinkyguy2323/banchy-os/releases) for the
 current build state.**
 

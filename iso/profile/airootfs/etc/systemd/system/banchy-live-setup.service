@@ -2,9 +2,10 @@
 Description=Banchy OS live session setup
 # Live image only (/etc/banchy-live marker ships in the airootfs overlay).
 ConditionPathExists=/etc/banchy-live
-# Runs before the gettys so the autologin user exists on tty1/ttyS0.
+# Runs before the gettys and the display manager so the live user exists
+# when SDDM (autologin) or the serial getty start.
 After=local-fs.target
-Before=getty@tty1.service serial-getty@ttyS0.service
+Before=getty@tty1.service serial-getty@ttyS0.service display-manager.service
 
 [Service]
 Type=oneshot

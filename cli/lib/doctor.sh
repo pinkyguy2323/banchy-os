@@ -226,7 +226,7 @@ b_doc_components() {
   if [[ -n "$missing" ]]; then
     b_doc_result fail "Banchy components" "missing: $missing"
   else
-    b_doc_result ok "Banchy components" "v${BANCHY_VERSION:-0.1.1}"
+    b_doc_result ok "Banchy components" "v${BANCHY_VERSION:-0.2.0}"
   fi
 }
 

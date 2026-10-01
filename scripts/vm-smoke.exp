@@ -101,6 +101,8 @@ set cmds {
     {banchy apply --check}
     {systemctl is-active NetworkManager}
     {id banchy}
+    {systemctl is-active display-manager}
+    {timeout 50 bash -c 'until pgrep -x Hyprland >/dev/null; do sleep 2; done'}
 }
 foreach cmd $cmds {
     set code [run_cmd $cmd]
